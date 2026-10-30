@@ -8,7 +8,7 @@ const api = async (url, method='GET', body) => {
   if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a operação.');
   return data;
 };
-const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',bookFrom:'',bookTo:'',bookSupplier:'',slotDay:'',bookings:[],pending:[],adminUsers:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[]};
+const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',bookings:[],pending:[],adminUsers:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0};
 const dateBR = day => day ? day.split('-').reverse().join('/') : '—';
 const shortDate = day => new Intl.DateTimeFormat('pt-BR',{weekday:'long',day:'2-digit',month:'long'}).format(new Date(day+'T12:00:00Z'));
 const formatNum = n => new Intl.NumberFormat('pt-BR').format(n || 0);
@@ -114,16 +114,18 @@ function bookingTable(rows,actions=true){
   return '<div class="table-wrap"><table class="data-table"><thead><tr><th>Senha</th><th>Data e horário</th><th>Fornecedor</th><th>Carga</th><th>Situação</th><th></th></tr></thead><tbody>'+rows.map(b=>'<tr><td><span class="cell-title">#'+String(b.id).padStart(3,'0')+'</span><span class="cell-sub">'+esc(b.vehicle_type)+'</span></td><td><span class="cell-title">'+dateBR(b.day)+'</span><span class="cell-sub">'+esc(b.slot)+'</span></td><td><span class="cell-title">'+esc(b.supplier_name)+'</span></td><td><span class="cell-title">'+formatWeight(b.weight_kg)+' kg</span><span class="cell-sub">'+formatNum(b.box_count)+' caixas · '+formatNum(b.item_count)+' itens</span></td><td><span class="badge '+b.status+'">'+(b.status==='active'?'● Confirmado':'○ Cancelado')+'</span></td><td><div class="mini-actions"><button type="button" class="btn" data-ticket="'+b.id+'">Senha</button>'+(actions&&b.status==='active'?'<button type="button" class="btn btn-danger" data-cancel="'+b.id+'">Cancelar</button>':'')+'</div></td></tr>').join('')+'</tbody></table></div>';
 }
 async function renderDashboard(){
+  const requestId=++state.dashRequest;
   const admin=state.user.role==='admin',commercial=state.user.role==='commercial';
   const actions=admin?'<button class="btn" type="button" data-history-open>Pesquisar histórico</button><button class="btn btn-primary" type="button" data-view="schedule">+ Novo agendamento</button>':'';
   $('#viewContent').innerHTML=pageHead('PAINEL DE CONTROLE','Dashboard','Indicadores das entregas no período selecionado.',actions)+
-  '<div class="card filter-card"><div class="field"><label for="dashFrom">De</label><input id="dashFrom" type="date" value="'+state.dashFrom+'"></div><div class="field"><label for="dashTo">Até</label><input id="dashTo" type="date" value="'+state.dashTo+'"></div>'+(admin?'<div class="field grow"><label for="dashSupplier">Fornecedor</label><select id="dashSupplier">'+supplierOptions(state.dashSupplier,true)+'</select></div>':'')+'<button class="btn" id="applyDash" type="button">Aplicar filtro</button></div><div id="dashBody"><div class="empty-state">Carregando indicadores...</div></div>';
+  '<div class="card filter-card"><div class="field"><label for="dashFrom">De</label><input id="dashFrom" type="date" value="'+state.dashFrom+'"></div><div class="field"><label for="dashTo">Até</label><input id="dashTo" type="date" value="'+state.dashTo+'"></div>'+(admin?'<div class="field grow"><label for="dashSupplier">Fornecedor</label><select id="dashSupplier">'+supplierOptions(state.dashSupplier,true)+'</select></div>':'')+'<small id="dashFilterFeedback" class="filter-feedback" aria-live="polite">Os resultados são atualizados automaticamente.</small></div><div id="dashBody"><div class="empty-state">Carregando indicadores...</div></div>';
   try{
     const params=new URLSearchParams({from:state.dashFrom,to:state.dashTo});
     if(state.dashSupplier)params.set('supplier_id',state.dashSupplier);
     let active=[],summary=null;
     if(commercial)summary=await api('/api/dashboard?'+params);
     else active=(await api('/api/bookings?'+params)).bookings.filter(b=>b.status==='active');
+    if(requestId!==state.dashRequest)return;
     const sum=key=>active.reduce((a,b)=>a+Number(b[key]||0),0);
     const totalBookings=commercial?Number(summary.carros||0):active.length;
     const totalWeight=commercial?Number(summary.peso||0):sum('weight_kg');
@@ -144,7 +146,7 @@ async function renderDashboard(){
       '<div class="charts-grid"><div class="card section-card"><div class="section-head"><div><h3>Entregas por dia da semana</h3><p>Quantidade de veículos confirmados no período</p></div></div><div class="weekday-chart">'+weekdayChart+'</div></div>'+
       '<div class="card section-card"><div class="section-head"><div><h3>Tipos de carga</h3><p>Distribuição dos agendamentos confirmados</p></div></div><div class="cargo-chart"><div class="donut-chart" style="'+donutStyle+'"><div><strong>'+formatNum(totalBookings)+'</strong><small>entregas</small></div></div><div class="chart-legend">'+legend+'</div></div></div></div>'+
       (admin?'<div class="dashboard-history card"><div><strong>Precisa consultar uma entrega?</strong><span>Pesquise o histórico com data, situação e fornecedor.</span></div><button class="btn" type="button" data-history-open>Abrir histórico →</button></div>':'');
-  }catch(e){$('#dashBody').innerHTML='<div class="empty-state">'+esc(e.message)+'</div>';toast(e.message,true)}
+  }catch(e){if(requestId!==state.dashRequest)return;$('#dashBody').innerHTML='<div class="empty-state">'+esc(e.message)+'</div>';toast(e.message,true)}
 }function supplierField(){
   if(state.user.role!=='admin')return '<div class="field"><label>Fornecedor</label><input value="'+esc(state.user.supplier_name)+'" disabled><small>Seu cadastro está vinculado a esta empresa.</small></div>';
   return supplierCombo('supplier');
@@ -351,10 +353,6 @@ document.addEventListener('click',async e=>{
   if(cancel){if(!confirm('Cancelar este agendamento? A vaga será liberada.'))return;try{await api('/api/bookings/'+cancel.dataset.cancel+'/cancel','POST',{});toast('Agendamento cancelado.');await renderBookings()}catch(err){toast(err.message,true)}return}
   const approve=e.target.closest('[data-approve]');
   if(approve){try{const role=approve.closest('.pending-item').querySelector('[data-approve-role]').value;await api('/api/admin/users/'+approve.dataset.approve+'/approve','POST',{role});toast('Acesso de '+roleNames[role].toLowerCase()+' aprovado.');await Promise.all([refreshPending(),refreshAdminUsers()]);state.meta=await api('/api/meta')}catch(err){toast(err.message,true)}return}
-  if(e.target.id==='applyDash'){
-    state.dashFrom=$('#dashFrom').value;state.dashTo=$('#dashTo').value;state.dashSupplier=$('#dashSupplier')?.value||'';
-    return renderDashboard();
-  }
   if(e.target.id==='applyBookings'){
     state.bookFrom=$('#bookFrom').value;state.bookTo=$('#bookTo').value;state.bookSupplier=$('#bookSupplier')?.value||'';
     return refreshBookings();
@@ -384,6 +382,13 @@ document.addEventListener('keydown',e=>{
   }
 });
 document.addEventListener('change',e=>{
+  if(['dashFrom','dashTo','dashSupplier'].includes(e.target.id)&&state.view==='dashboard'){
+    state.dashFrom=$('#dashFrom').value;state.dashTo=$('#dashTo').value;state.dashSupplier=$('#dashSupplier')?.value||'';
+    const feedback=$('#dashFilterFeedback');
+    if(state.dashFrom>state.dashTo){if(feedback)feedback.textContent='A data inicial deve ser anterior à data final.';return}
+    if(feedback)feedback.textContent='Atualizando resultados automaticamente...';
+    return renderDashboard();
+  }
   if(e.target.id==='bookingDay'){
     if(!e.target.value)return;
     const minimum=firstAvailableDeliveryDay();
