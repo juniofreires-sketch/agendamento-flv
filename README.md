@@ -34,6 +34,13 @@ O build cria `dist/`, publicado segundo `vercel.json`. Antes de publicar, crie u
 
 O esquema cria o primeiro perfil administrativo ativo para o email autorizado nele, depois que esse endereço confirma o cadastro. Contas de fornecedores ficam pendentes até aprovação administrativa.
 
+## Ambiente de estudo publicado
+
+- Portal: https://agendamento-flv-nu.vercel.app
+- Supabase: projeto `Agendamento FLV` (`vtnpnosxahubqfsinlko`) na organização `juniofreires-sketch's Org`, região `sa-east-1`.
+- Vercel: projeto `agendamento-flv` na equipe Hobby `Indicadores CD`.
+- `supabase/config.toml` define a URL de retorno da autenticação. Os arquivos locais de credenciais e o banco SQLite ficam fora do Git.
+
 ## Planos gratuitos
 
 O plano Supabase Free comporta 430 fornecedores quanto ao número de contas, dentro da cota atual de usuários ativos. Ele tem cotas de armazenamento e tráfego e pode pausar projetos com pouca atividade.
