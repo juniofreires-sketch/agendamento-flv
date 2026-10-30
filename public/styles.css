@@ -210,9 +210,9 @@ h1,h2,h3,.stat-value,.side-brand strong,.ticket-number{font-family:Inter,Arial,s
 .daily-supplier-chart .chart-row strong{font-size:12px}
 .day-detail-button{width:30px;height:30px;padding:0;border:1px solid #cbdcf3;border-radius:9px;background:#fff;color:#2478f4;font:inherit;font-size:20px;line-height:1;cursor:pointer}
 .day-detail-button:hover{background:#eaf2ff;border-color:#91b9f5}
-.dashboard-day-window{width:min(100%,760px)}
+.dashboard-day-window{width:min(100%,980px)}
 .dashboard-day-content{padding:5px 22px 23px}
-.supplier-day-table{min-width:500px}
+.supplier-day-table{min-width:800px}
 @media(max-width:720px){.daily-supplier-chart .chart-row{grid-template-columns:minmax(80px,auto) minmax(32px,1fr) 25px 30px;gap:7px}.chart-day-label{font-size:11px}.chart-day-label small{font-size:9px}.dashboard-day-content{padding:2px 14px 16px}.dashboard-day-window .modal-toolbar strong{font-size:13px}}
 @media(max-width:720px){.daily-supplier-chart.summary-only .chart-row{grid-template-columns:minmax(80px,auto) minmax(32px,1fr) 25px}}
 @media(max-width:1000px){.auth-intro{padding:35px}.auth-hero-copy{margin-top:65px}.auth-intro h1{font-size:48px}.auth-card{padding:25px}.auth-inner{padding:37px 30px}}

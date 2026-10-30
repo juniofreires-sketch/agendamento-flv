@@ -119,11 +119,14 @@ function summarizeBookingsBySupplierDay(bookings){
   for(const booking of bookings){
     const key=booking.day+':'+booking.supplier_id;
     let row=groups.get(key);
-    if(!row){row={day:booking.day,supplier_id:booking.supplier_id,supplier_name:booking.supplier_name,appointment_count:0,slotSet:new Set()};groups.set(key,row)}
+    if(!row){row={day:booking.day,supplier_id:booking.supplier_id,supplier_name:booking.supplier_name,appointment_count:0,weight_total:0,box_total:0,item_total:0,slotSet:new Set()};groups.set(key,row)}
     row.appointment_count++;
+    row.weight_total+=Number(booking.weight_kg||0);
+    row.box_total+=Number(booking.box_count||0);
+    row.item_total+=Number(booking.item_count||0);
     row.slotSet.add(String(booking.slot).slice(0,5));
   }
-  return Array.from(groups.values()).map(row=>({day:row.day,supplier_id:row.supplier_id,supplier_name:row.supplier_name,appointment_count:row.appointment_count,slots:Array.from(row.slotSet).sort().join(', ')}));
+  return Array.from(groups.values()).map(row=>({day:row.day,supplier_id:row.supplier_id,supplier_name:row.supplier_name,appointment_count:row.appointment_count,weight_total:row.weight_total,box_total:row.box_total,item_total:row.item_total,slots:Array.from(row.slotSet).sort().join(', ')}));
 }
 const weekdayName=day=>new Intl.DateTimeFormat('pt-BR',{weekday:'long'}).format(new Date(day+'T12:00:00Z')).replace(/^./,letter=>letter.toUpperCase());
 async function renderDashboard(){
@@ -166,7 +169,7 @@ async function renderDashboard(){
 function openDashboardDayModal(day){
   const rows=state.dashboardSupplierRows.filter(row=>row.day===day);
   $('#dashboardDayModalTitle').textContent='Fornecedores agendados — '+weekdayName(day)+' '+dateBR(day);
-  $('#dashboardDayModalContent').innerHTML=rows.length?'<div class="table-wrap"><table class="data-table supplier-day-table"><thead><tr><th>Fornecedor</th><th>Agendamentos</th><th>Horários</th></tr></thead><tbody>'+rows.sort((a,b)=>a.supplier_name.localeCompare(b.supplier_name,'pt-BR')).map(row=>'<tr><td><span class="cell-title">'+esc(row.supplier_name)+'</span></td><td>'+formatNum(row.appointment_count)+'</td><td>'+esc(row.slots)+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state">Nenhum agendamento encontrado para esta data.</div>';
+  $('#dashboardDayModalContent').innerHTML=rows.length?'<div class="table-wrap"><table class="data-table supplier-day-table"><thead><tr><th>Fornecedor</th><th>Agendamentos</th><th>Horários</th><th>Peso total</th><th>Caixas</th><th>Itens</th></tr></thead><tbody>'+rows.sort((a,b)=>a.supplier_name.localeCompare(b.supplier_name,'pt-BR')).map(row=>'<tr><td><span class="cell-title">'+esc(row.supplier_name)+'</span></td><td>'+formatNum(row.appointment_count)+'</td><td>'+esc(row.slots)+'</td><td>'+formatWeight(row.weight_total)+' kg</td><td>'+formatNum(row.box_total)+'</td><td>'+formatNum(row.item_total)+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state">Nenhum agendamento encontrado para esta data.</div>';
   $('#dashboardDayModal').classList.remove('hidden');
   $('#closeDashboardDay').focus();
 }

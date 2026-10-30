@@ -520,7 +520,7 @@ revoke all on function public.admin_mark_booking_no_show(bigint) from public, an
 grant execute on function public.admin_mark_booking_no_show(bigint) to authenticated;
 
 create or replace function public.dashboard_daily_supplier_summary(p_from date,p_to date)
-returns table(day date,supplier_id bigint,supplier_name text,appointment_count bigint,slots text)
+returns table(day date,supplier_id bigint,supplier_name text,appointment_count bigint,slots text,weight_total numeric,box_total bigint,item_total bigint)
 language plpgsql security definer set search_path = ''
 as $$
 declare
@@ -534,7 +534,8 @@ begin
   if requester.role='admin' then
     return query
       select b.day,b.supplier_id,s.name,count(*)::bigint,
-        pg_catalog.string_agg(pg_catalog.to_char(b.slot,'HH24:MI'),', ' order by b.slot)
+        pg_catalog.string_agg(pg_catalog.to_char(b.slot,'HH24:MI'),', ' order by b.slot),
+        coalesce(sum(b.weight_kg),0)::numeric,coalesce(sum(b.box_count),0)::bigint,coalesce(sum(b.item_count),0)::bigint
       from public.bookings b join public.suppliers s on s.id=b.supplier_id
       where b.day between p_from and p_to and b.status='active'
       group by b.day,b.supplier_id,s.name
@@ -542,7 +543,8 @@ begin
     return;
   end if;
   return query
-    select b.day,null::bigint,null::text,count(distinct b.supplier_id)::bigint,null::text
+    select b.day,null::bigint,null::text,count(distinct b.supplier_id)::bigint,null::text,
+      coalesce(sum(b.weight_kg),0)::numeric,coalesce(sum(b.box_count),0)::bigint,coalesce(sum(b.item_count),0)::bigint
     from public.bookings b
     where b.day between p_from and p_to and b.status='active'
     group by b.day
