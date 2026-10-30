@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#103d33">
+  <title>Portal FLV · Agendamento de entregas</title>
+  <link rel="stylesheet" href="/styles.css?v=2">
+</head>
+<body>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <main id="authScreen" class="auth-screen">
+    <section class="auth-intro">
+      <img class="brand-logo hero-logo" src="/logo-dia-a-dia.png" alt="Dia a Dia">
+      <p class="eyebrow light">PORTAL DE FORNECEDORES</p>
+      <h1>Suas entregas<br><em>no horário certo.</em></h1>
+      <p class="intro-copy">Agende cargas FLV, acompanhe suas entregas e leve a senha impressa para apresentar na portaria.</p>
+      <div class="intro-rule"><span>05:00 – 10:00</span><span>Segunda a sábado</span><span>Senha para portaria</span></div>
+      <div class="intro-bottom">Operação de recebimento FLV <span>●</span> Acesso seguro por fornecedor</div>
+    </section>
+    <section class="auth-card">
+      <div class="auth-mobile-brand"><img class="brand-logo mobile-logo" src="/logo-dia-a-dia.png" alt="Dia a Dia"><strong>Portal FLV</strong></div>
+      <div id="authContent"></div>
+    </section>
+  </main>
+  <div id="appShell" class="app-shell hidden">
+    <aside id="sidebar" class="sidebar">
+      <div class="side-brand"><img class="brand-logo side-logo" src="/logo-dia-a-dia.png" alt="Dia a Dia"><span class="side-label"><strong>Portal FLV</strong><small>Recebimento</small></span></div>
+      <div class="side-kicker side-label">MENU PRINCIPAL</div>
+      <nav aria-label="Menu principal">
+        <button type="button" data-view="dashboard" class="nav-link active"><span class="nav-icon">▦</span><span class="side-label">Dashboard</span></button>
+        <button type="button" data-view="schedule" class="nav-link"><span class="nav-icon">＋</span><span class="side-label">Novo agendamento</span></button>
+        <button type="button" data-view="bookings" class="nav-link"><span class="nav-icon">▤</span><span class="side-label">Agendamentos</span></button>
+        <button type="button" data-view="admin" class="nav-link admin-only hidden"><span class="nav-icon">♙</span><span class="side-label">Administração</span></button>
+      </nav>
+      <div class="side-spacer"></div>
+      <div class="side-help"><span class="nav-icon">ⓘ</span><span class="side-label">Entregas fora do horário?<small>Fale com o setor comercial.</small></span></div>
+      <button id="logoutBtn" type="button" class="nav-link logout"><span class="nav-icon">↪</span><span class="side-label">Sair</span></button>
+    </aside>
+    <div id="mobileOverlay" class="mobile-overlay"></div>
+    <div class="main-area">
+      <header class="topbar">
+        <button id="menuBtn" class="icon-button mobile-menu" type="button" aria-label="Abrir menu">☰</button>
+        <div><p class="top-context">OPERAÇÃO FLV <span>/</span> <span id="crumb">DASHBOARD</span></p><h2 id="pageTitle">Dashboard</h2></div>
+        <div class="top-actions"><div class="date-pill"><span class="green-dot"></span><span id="todayLabel"></span></div><div class="avatar" id="userAvatar">F</div></div>
+      </header>
+      <main id="viewContent" class="view-content"></main>
+    </div>
+  </div>
+  <div id="ticketModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Senha para entrega">
+    <div class="ticket-window"><div class="modal-toolbar"><strong>Senha de entrega</strong><div><button type="button" id="printTicket" class="btn btn-primary">Imprimir senha</button><button type="button" id="closeTicket" class="icon-button" aria-label="Fechar">✕</button></div></div><div id="ticketContent"></div></div>
+  </div>
+  <div id="historyModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Pesquisar histórico">
+    <div class="history-window">
+      <div class="modal-toolbar"><strong>Pesquisar histórico</strong><button type="button" id="closeHistory" class="icon-button" aria-label="Fechar">✕</button></div>
+      <div id="historyModalContent"></div>
+    </div>
+  </div>
+  <script type="module" src="/app.js?v=2"></script>
+</body>
+</html>

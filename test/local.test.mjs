@@ -1,0 +1,51 @@
+import assert from 'node:assert/strict';
+import { Readable } from 'node:stream';
+process.env.FLV_TEST_MODE='1';
+const { server } = await import('../server.js');
+async function call(method,url,body,cookie=''){
+  return new Promise((resolve,reject)=>{
+    const req=Readable.from(body===undefined?[]:[JSON.stringify(body)]);
+    req.method=method;req.url=url;req.headers={host:'localhost:3100',cookie,origin:'http://localhost:3100'};
+    const res={status:200,headers:{},writeHead(status,headers){this.status=status;this.headers=headers},end(text){try{resolve({status:this.status,headers:this.headers,data:JSON.parse(text||'{}')})}catch(e){reject(e)}}};
+    server.emit('request',req,res);
+  });
+}
+const meta=await call('GET','/api/meta');
+assert.equal(meta.status,200);
+assert.equal(meta.data.suppliers.length,409);
+assert.equal(meta.data.bootstrap,true);
+const [first,second]=meta.data.suppliers;
+const admin=await call('POST','/api/bootstrap',{name:'Admin Local',email:'admin@local.test',password:'senha-local-forte'});
+assert.equal(admin.status,200);
+const adminCookie=admin.headers['set-cookie'].split(';')[0];
+assert.equal((await call('POST','/api/register',{name:'Pessoa A',email:'a@local.test',password:'senha-local-forte',supplier_id:first.id})).status,201);
+assert.equal((await call('POST','/api/register',{name:'Pessoa B',email:'b@local.test',password:'senha-local-forte',supplier_id:second.id})).status,201);
+assert.equal((await call('POST','/api/login',{email:'a@local.test',password:'senha-local-forte'})).status,403);
+const pending=await call('GET','/api/admin/pending',undefined,adminCookie);
+assert.equal(pending.data.users.length,2);
+for(const u of pending.data.users)assert.equal((await call('POST','/api/admin/users/'+u.id+'/approve',{},adminCookie)).status,200);
+const a=await call('POST','/api/login',{email:'a@local.test',password:'senha-local-forte'});
+const b=await call('POST','/api/login',{email:'b@local.test',password:'senha-local-forte'});
+const aCookie=a.headers['set-cookie'].split(';')[0], bCookie=b.headers['set-cookie'].split(';')[0];
+const date=new Date();date.setUTCDate(date.getUTCDate()+14);
+let day=date.toISOString().slice(0,10);
+while(date.getUTCDay()===0){date.setUTCDate(date.getUTCDate()+1);day=date.toISOString().slice(0,10)}
+const booking={day,weight_kg:100,item_count:8,box_count:20,vehicle_type:'VUC',cargo_type:'Paletizada'};
+const made=[];
+for(let i=0;i<5;i++){const r=await call('POST','/api/bookings',booking,aCookie);assert.equal(r.status,200);assert.equal(r.data.booking.slot,'05:00');made.push(r.data.booking)}
+const sixth=await call('POST','/api/bookings',booking,bCookie);
+assert.equal(sixth.status,200);assert.equal(sixth.data.booking.slot,'05:30');
+assert.equal((await call('GET','/api/bookings/'+sixth.data.booking.id,undefined,aCookie)).status,404);
+const visible=await call('GET','/api/bookings?from='+day+'&to='+day,undefined,bCookie);
+assert.equal(visible.data.bookings.length,1);
+assert.equal((await call('POST','/api/bookings/'+made[0].id+'/cancel',{},aCookie)).status,200);
+const reused=await call('POST','/api/bookings',booking,bCookie);
+assert.equal(reused.data.booking.slot,'05:00');
+const sunday=new Date(day+'T12:00:00Z');sunday.setUTCDate(sunday.getUTCDate()+((7-sunday.getUTCDay())%7));
+assert.equal((await call('POST','/api/bookings',{...booking,day:sunday.toISOString().slice(0,10)},aCookie)).status,400);
+assert.equal((await call('POST','/api/admin/suppliers',{name:'Empresa indevida'},aCookie)).status,403);
+assert.equal((await call('POST','/api/bookings',{...booking,vehicle_type:'CAMINHÃO NÃO LISTADO'},aCookie)).status,400);
+for(let i=0;i<49;i++)assert.equal((await call('POST','/api/bookings',booking,aCookie)).status,200);
+assert.equal((await call('POST','/api/bookings',booking,bCookie)).status,409);
+console.log('PASS: importação, autenticação, aprovação, isolamento, capacidade, cancelamento e domingo');
+server.close();

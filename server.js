@@ -1,0 +1,228 @@
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
+
+const root = path.dirname(fileURLToPath(import.meta.url));
+const dataDir = process.env.FLV_DATA_DIR || path.join(root, 'data');
+fs.mkdirSync(dataDir, { recursive: true });
+const db = new DatabaseSync(process.env.FLV_TEST_MODE === '1' ? ':memory:' : path.join(dataDir, 'flv.db'));
+db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
+db.exec([
+  'CREATE TABLE IF NOT EXISTS suppliers (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE)',
+  'CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN (\'admin\',\'supplier\')), status TEXT NOT NULL CHECK(status IN (\'active\',\'pending\')), supplier_id INTEGER REFERENCES suppliers(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)',
+  'CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires_at TEXT NOT NULL)',
+  'CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, supplier_id INTEGER NOT NULL REFERENCES suppliers(id), user_id TEXT NOT NULL REFERENCES users(id), day TEXT NOT NULL, slot TEXT NOT NULL, order_number TEXT, invoice_number TEXT, weight_kg REAL NOT NULL, item_count INTEGER NOT NULL, box_count INTEGER NOT NULL, vehicle_type TEXT NOT NULL, cargo_type TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN (\'active\',\'cancelled\')), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, cancelled_at TEXT)',
+  'CREATE INDEX IF NOT EXISTS bookings_day_slot ON bookings(day, slot, status)',
+  'CREATE INDEX IF NOT EXISTS bookings_supplier ON bookings(supplier_id, day)'
+].join(';\n') + ';');
+
+const seed = JSON.parse(fs.readFileSync(path.join(root, 'suppliers.json'), 'utf8'));
+const insertSupplier = db.prepare('INSERT OR IGNORE INTO suppliers(name) VALUES (?)');
+for (const name of seed) insertSupplier.run(name);
+const vehicleTypes = ['3/4','BITREM','CARRETA 24','CARRETA 26','CARRETA 28','CARRETA 30','FIORINO','TOCO','TRUCK','VUC'];
+const cargoTypes = ['Batida / Paletizada','Carga batida','Paletizada','Pallet sobreposto'];
+const slots = Array.from({length: 11}, (_, i) => {
+  const m = 300 + i * 30;
+  return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+});
+const commercialMessage = 'Os agendamentos são feitos de segunda a sábado, das 05:00 às 10:00. Para uma entrega fora dessa janela, entre em contato com o setor comercial.';
+const zone = 'America/Sao_Paulo';
+const nowParts = () => {
+  const d = new Date();
+  const day = new Intl.DateTimeFormat('sv-SE', {timeZone:zone, year:'numeric', month:'2-digit', day:'2-digit'}).format(d);
+  const time = new Intl.DateTimeFormat('en-GB', {timeZone:zone, hour:'2-digit', minute:'2-digit', hourCycle:'h23'}).format(d);
+  return {day, time};
+};
+const isValidDay = day => /^\d{4}-\d{2}-\d{2}$/.test(day) && !Number.isNaN(Date.parse(day + 'T00:00:00Z')) && new Date(day + 'T00:00:00Z').toISOString().slice(0,10) === day;
+const isSunday = day => new Date(day + 'T00:00:00Z').getUTCDay() === 0;
+const allowedSlots = day => {
+  const now = nowParts();
+  if (!isValidDay(day) || isSunday(day) || day < now.day) return [];
+  return slots.filter(slot => day > now.day || slot >= now.time);
+};
+const json = (res, status, body, headers={}) => {
+  res.writeHead(status, {'content-type':'application/json; charset=utf-8', 'cache-control':'no-store', ...headers});
+  res.end(JSON.stringify(body));
+};
+const fail = (res, status, message) => json(res,status,{error:message});
+const readBody = async req => {
+  let raw = '';
+  for await (const chunk of req) {
+    raw += chunk;
+    if (raw.length > 32768) throw new Error('O formulário é muito grande.');
+  }
+  try { return JSON.parse(raw || '{}'); } catch { throw new Error('Dados inválidos.'); }
+};
+const hashPassword = password => {
+  const salt = randomBytes(16).toString('hex');
+  return salt + ':' + scryptSync(password,salt,64).toString('hex');
+};
+const verifyPassword = (password, stored) => {
+  const [salt, hash] = stored.split(':');
+  const actual = scryptSync(password,salt,64);
+  return timingSafeEqual(actual,Buffer.from(hash,'hex'));
+};
+const hashToken = token => createHash('sha256').update(token).digest('hex');
+const currentUser = req => {
+  const token = /(?:^|; )flv_session=([^;]+)/.exec(req.headers.cookie || '')?.[1];
+  if (!token) return null;
+  return db.prepare('SELECT u.id,u.name,u.email,u.role,u.status,u.supplier_id,s.name AS supplier_name FROM sessions x JOIN users u ON u.id=x.user_id LEFT JOIN suppliers s ON s.id=u.supplier_id WHERE x.token_hash=? AND x.expires_at > CURRENT_TIMESTAMP').get(hashToken(token)) || null;
+};
+const requireUser = (req,res,admin=false) => {
+  const user = currentUser(req);
+  if (!user || user.status !== 'active') { fail(res,401,'Faça login para continuar.'); return null; }
+  if (admin && user.role !== 'admin') { fail(res,403,'Acesso restrito ao administrador.'); return null; }
+  return user;
+};
+const createSession = (res,user) => {
+  const token = randomBytes(32).toString('hex');
+  const expires = new Date(Date.now() + 7*86400000).toISOString();
+  db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES (?,?,?)').run(hashToken(token),user.id,expires);
+  json(res,200,{user}, {'set-cookie':'flv_session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800'});
+};
+const supplierRow = row => ({id:row.id,name:row.name});
+const bookingRow = row => ({
+  id:row.id, supplier_id:row.supplier_id, supplier_name:row.supplier_name, day:row.day,
+  slot:row.slot, order_number:row.order_number, invoice_number:row.invoice_number,
+  weight_kg:row.weight_kg, item_count:row.item_count, box_count:row.box_count,
+  vehicle_type:row.vehicle_type, cargo_type:row.cargo_type, status:row.status,
+  created_at:row.created_at, cancelled_at:row.cancelled_at
+});
+const selectBookings = 'SELECT b.*, s.name AS supplier_name FROM bookings b JOIN suppliers s ON s.id=b.supplier_id';
+const sendBooking = (res,id,user) => {
+  const b = db.prepare(selectBookings+' WHERE b.id=?').get(id);
+  if (!b || (user.role !== 'admin' && b.supplier_id !== user.supplier_id)) return fail(res,404,'Agendamento não encontrado.');
+  return json(res,200,{booking:bookingRow(b)});
+};
+const sendFile = (res,filename,type) => {
+  const file = path.join(root,'public',filename);
+  try {
+    res.writeHead(200,{'content-type':type,'cache-control':'no-cache'});
+    fs.createReadStream(file).pipe(res);
+  } catch { fail(res,404,'Página não encontrada.'); }
+};
+const port = Number(process.env.PORT || 3100);
+const server = http.createServer(async (req,res) => {
+  try {
+    const url = new URL(req.url,'http://localhost');
+    const p = url.pathname;
+    if (req.method === 'GET' && (p === '/' || p === '/index.html')) return sendFile(res,'index.html','text/html; charset=utf-8');
+    if (req.method === 'GET' && p === '/styles.css') return sendFile(res,'styles.css','text/css; charset=utf-8');
+    if (req.method === 'GET' && p === '/app.js') return sendFile(res,'app.js','text/javascript; charset=utf-8');
+    if (req.method === 'GET' && p === '/logo-dia-a-dia.png') return sendFile(res,'logo-dia-a-dia.png','image/png');
+    if (p.startsWith('/api/') && !['GET','HEAD'].includes(req.method)) {
+      const origin = req.headers.origin;
+      if (origin && new URL(origin).host !== req.headers.host) return fail(res,403,'Origem não autorizada.');
+    }
+    if (req.method === 'GET' && p === '/api/meta') {
+      const suppliers = db.prepare('SELECT id,name FROM suppliers ORDER BY name').all().map(supplierRow);
+      return json(res,200,{suppliers,vehicleTypes,cargoTypes,bootstrap:db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='admin'").get().n === 0,today:nowParts().day,current_time:nowParts().time});
+    }
+    if (req.method === 'POST' && p === '/api/bootstrap') {
+      if (db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='admin'").get().n) return fail(res,403,'Administrador já configurado.');
+      const b = await readBody(req);
+      const name = String(b.name||'').trim(), email = String(b.email||'').trim().toLowerCase(), password = String(b.password||'');
+      if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email) || password.length < 10) return fail(res,400,'Informe nome, email válido e senha de pelo menos 10 caracteres.');
+      const id = randomBytes(16).toString('hex');
+      db.prepare("INSERT INTO users(id,name,email,password_hash,role,status) VALUES (?,?,?,?, 'admin','active')").run(id,name,email,hashPassword(password));
+      return createSession(res,{id,name,email,role:'admin',status:'active',supplier_id:null,supplier_name:null});
+    }
+    if (req.method === 'POST' && p === '/api/register') {
+      const b = await readBody(req);
+      const name = String(b.name||'').trim(), email = String(b.email||'').trim().toLowerCase(), password = String(b.password||'');
+      const supplier = db.prepare('SELECT id FROM suppliers WHERE id=?').get(Number(b.supplier_id));
+      if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email) || password.length < 10 || !supplier) return fail(res,400,'Confira nome, email, senha (mínimo 10 caracteres) e fornecedor.');
+      try {
+        db.prepare("INSERT INTO users(id,name,email,password_hash,role,status,supplier_id) VALUES (?,?,?,?, 'supplier','pending',?)").run(randomBytes(16).toString('hex'),name,email,hashPassword(password),supplier.id);
+      } catch { return fail(res,409,'Este email já está cadastrado.'); }
+      return json(res,201,{message:'Cadastro enviado. Aguarde a aprovação do administrador para acessar o portal.'});
+    }
+    if (req.method === 'POST' && p === '/api/login') {
+      const b = await readBody(req);
+      const row = db.prepare('SELECT u.*,s.name AS supplier_name FROM users u LEFT JOIN suppliers s ON s.id=u.supplier_id WHERE u.email=?').get(String(b.email||'').trim().toLowerCase());
+      if (!row || !verifyPassword(String(b.password||''),row.password_hash)) return fail(res,401,'Email ou senha incorretos.');
+      if (row.status !== 'active') return fail(res,403,'Seu cadastro está aguardando aprovação do administrador.');
+      return createSession(res,{id:row.id,name:row.name,email:row.email,role:row.role,status:row.status,supplier_id:row.supplier_id,supplier_name:row.supplier_name});
+    }
+    if (req.method === 'POST' && p === '/api/logout') {
+      const token = /(?:^|; )flv_session=([^;]+)/.exec(req.headers.cookie || '')?.[1];
+      if (token) db.prepare('DELETE FROM sessions WHERE token_hash=?').run(hashToken(token));
+      return json(res,200,{ok:true},{'set-cookie':'flv_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'});
+    }
+    if (req.method === 'GET' && p === '/api/me') return json(res,200,{user:currentUser(req)});
+    if (req.method === 'POST' && p === '/api/bookings') {
+      const user = requireUser(req,res); if (!user) return;
+      const b = await readBody(req);
+      const day = String(b.day||''), weight = Number(b.weight_kg), items = Number(b.item_count), boxes = Number(b.box_count);
+      const supplierId = user.role === 'admin' ? Number(b.supplier_id) : user.supplier_id;
+      if (!db.prepare('SELECT id FROM suppliers WHERE id=?').get(supplierId)) return fail(res,400,'Selecione um fornecedor válido.');
+      if (!isValidDay(day) || isSunday(day) || day < nowParts().day) return fail(res,400,commercialMessage);
+      if (!Number.isFinite(weight) || weight <= 0 || !Number.isInteger(items) || items < 0 || !Number.isInteger(boxes) || boxes < 0) return fail(res,400,'Informe peso positivo e quantidades inteiras maiores ou iguais a zero.');
+      if (!vehicleTypes.includes(b.vehicle_type) || !cargoTypes.includes(b.cargo_type)) return fail(res,400,'Selecione o tipo de veículo e o tipo de carga.');
+      const order = String(b.order_number||'').trim().slice(0,80), invoice = String(b.invoice_number||'').trim().slice(0,80);
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const eligible = allowedSlots(day);
+        if (!eligible.length) { db.exec('ROLLBACK'); return fail(res,400,commercialMessage); }
+        const occupied = db.prepare("SELECT slot,COUNT(*) AS n FROM bookings WHERE day=? AND status='active' GROUP BY slot").all(day);
+        const counts = Object.fromEntries(occupied.map(x=>[x.slot,x.n]));
+        const slot = eligible.find(x=>(counts[x]||0)<5);
+        if (!slot) { db.exec('ROLLBACK'); return fail(res,409,'Todos os horários deste dia estão completos. Escolha outra data ou entre em contato com o setor comercial.'); }
+        const out = db.prepare("INSERT INTO bookings(supplier_id,user_id,day,slot,order_number,invoice_number,weight_kg,item_count,box_count,vehicle_type,cargo_type,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,'active')").run(supplierId,user.id,day,slot,order||null,invoice||null,weight,items,boxes,b.vehicle_type,b.cargo_type);
+        db.exec('COMMIT');
+        return sendBooking(res,Number(out.lastInsertRowid),user);
+      } catch (e) { db.exec('ROLLBACK'); throw e; }
+    }
+    if (req.method === 'GET' && p === '/api/bookings') {
+      const user = requireUser(req,res); if (!user) return;
+      const from = url.searchParams.get('from') || '0000-01-01', to = url.searchParams.get('to') || '9999-12-31';
+      if (!isValidDay(from) || !isValidDay(to) || from > to) return fail(res,400,'Período inválido.');
+      const supplier = user.role === 'admin' ? Number(url.searchParams.get('supplier_id')||0) : user.supplier_id;
+      const sql = selectBookings + ' WHERE b.day BETWEEN ? AND ?' + (supplier ? ' AND b.supplier_id=?' : '') + ' ORDER BY b.day DESC,b.slot DESC,b.id DESC LIMIT 2000';
+      const rows = db.prepare(sql).all(...(supplier?[from,to,supplier]:[from,to]));
+      return json(res,200,{bookings:rows.map(bookingRow)});
+    }
+    const match = /^\/api\/bookings\/(\d+)(?:\/(cancel))?$/.exec(p);
+    if (match && req.method === 'GET' && !match[2]) {
+      const user = requireUser(req,res); if (!user) return;
+      return sendBooking(res,Number(match[1]),user);
+    }
+    if (match && req.method === 'POST' && match[2] === 'cancel') {
+      const user = requireUser(req,res); if (!user) return;
+      const b = db.prepare('SELECT * FROM bookings WHERE id=?').get(Number(match[1]));
+      if (!b || (user.role !== 'admin' && b.supplier_id !== user.supplier_id)) return fail(res,404,'Agendamento não encontrado.');
+      if (b.status === 'cancelled') return fail(res,409,'Este agendamento já está cancelado.');
+      db.prepare("UPDATE bookings SET status='cancelled',cancelled_at=CURRENT_TIMESTAMP WHERE id=?").run(b.id);
+      return sendBooking(res,b.id,user);
+    }
+    if (req.method === 'GET' && p === '/api/admin/pending') {
+      if (!requireUser(req,res,true)) return;
+      return json(res,200,{users:db.prepare("SELECT u.id,u.name,u.email,u.created_at,s.name AS supplier_name FROM users u JOIN suppliers s ON s.id=u.supplier_id WHERE u.status='pending' ORDER BY u.created_at").all()});
+    }
+    if (req.method === 'POST' && /^\/api\/admin\/users\/[a-f0-9]+\/approve$/.test(p)) {
+      if (!requireUser(req,res,true)) return;
+      const id=p.split('/')[4];
+      const out=db.prepare("UPDATE users SET status='active' WHERE id=? AND status='pending' AND role='supplier'").run(id);
+      if (!out.changes) return fail(res,404,'Cadastro pendente não encontrado.');
+      return json(res,200,{ok:true});
+    }
+    if (req.method === 'POST' && p === '/api/admin/suppliers') {
+      if (!requireUser(req,res,true)) return;
+      const b=await readBody(req), name=String(b.name||'').trim().replace(/\s+/g,' ');
+      if (name.length<3 || name.length>160) return fail(res,400,'Informe a razão social com 3 a 160 caracteres.');
+      try {
+        const out=db.prepare('INSERT INTO suppliers(name) VALUES (?)').run(name);
+        return json(res,201,{supplier:{id:Number(out.lastInsertRowid),name}});
+      } catch { return fail(res,409,'Este fornecedor já está cadastrado.'); }
+    }
+    return fail(res,404,'Página não encontrada.');
+  } catch (e) {
+    console.error(e);
+    return fail(res,500,'Não foi possível concluir a operação. Tente novamente.');
+  }
+});
+if (process.env.FLV_TEST_MODE !== '1') server.listen(port,'127.0.0.1',()=>console.log('Portal FLV: http://localhost:'+port));
+export { server };
