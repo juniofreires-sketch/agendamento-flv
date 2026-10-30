@@ -8,7 +8,7 @@ const api = async (url, method='GET', body) => {
   if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a operação.');
   return data;
 };
-const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',bookings:[],pending:[],adminUsers:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0};
+const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],availabilityRequest:0,bookings:[],pending:[],adminUsers:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0};
 const dateBR = day => day ? day.split('-').reverse().join('/') : '—';
 const shortDate = day => new Intl.DateTimeFormat('pt-BR',{weekday:'long',day:'2-digit',month:'long'}).format(new Date(day+'T12:00:00Z'));
 const formatNum = n => new Intl.NumberFormat('pt-BR').format(n || 0);
@@ -157,6 +157,7 @@ function renderSchedule(){
   $('#viewContent').innerHTML=pageHead('AGENDAMENTO','Nova entrega','Preencha os dados para solicitar o agendamento da entrega.')+
   '<div class="schedule-grid"><div class="card form-card"><form id="bookingForm"><div class="form-section-title"><span>1</span> Fornecedor e data</div>'+supplierField()+
   '<div class="field"><label for="bookingDay">Data da entrega *</label><input id="bookingDay" name="day" type="date" min="'+minimumDay+'" value="'+state.slotDay+'" required><small>Agendamentos somente a partir do próximo dia disponível. Domingos não recebem agendamentos.</small></div>'+
+  '<div class="field booking-time-field"><label>Horário de agendamento *</label><small>Selecione um horário disponível. Horários sem vagas não aparecem.</small><div id="bookingSlots" class="booking-slot-grid" aria-label="Horários disponíveis"><div class="slot-message">Carregando horários disponíveis...</div></div><input id="bookingSlot" name="slot" type="hidden" value="'+esc(state.selectedSlot)+'"></div>'+
   '<div class="form-divider"></div><div class="form-section-title"><span>2</span> Dados da carga</div>'+
   '<div class="field-row"><div class="field"><label for="orderNumber">Número do pedido</label><input id="orderNumber" name="order_number" maxlength="80" placeholder="Ex: 12345"></div><div class="field"><label for="invoiceNumber">Nota fiscal</label><input id="invoiceNumber" name="invoice_number" maxlength="80" placeholder="Ex: 98765"></div></div>'+
   '<div class="field-row"><div class="field"><label for="weight">Peso da carga (kg) *</label><input id="weight" name="weight_kg" type="number" min="0.01" step="0.01" placeholder="Ex: 1250" required></div><div class="field"><label for="items">Quantidade de itens *</label><input id="items" name="item_count" type="number" min="0" step="1" placeholder="Ex: 80" required></div></div>'+
@@ -164,6 +165,30 @@ function renderSchedule(){
   '<div class="field"><label for="cargo">Tipo de carga *</label><select id="cargo" name="cargo_type" required>'+optionList(state.meta.cargoTypes)+'</select></div>'+
   '<div class="form-footer"><p>Após confirmar, a senha estará disponível para impressão e apresentação na portaria.</p><button type="submit" class="btn btn-primary">Confirmar agendamento →</button></div></form></div></div>'+
   '';
+  refreshAvailableSlots(state.slotDay);
+}
+function renderAvailableSlots(){
+  const target=$('#bookingSlots');if(!target)return;
+  if(!state.availableSlots.length){target.innerHTML='<div class="slot-message">Não há horários disponíveis para esta data. Escolha outra data para continuar.</div>';state.selectedSlot=''}
+  else target.innerHTML=state.availableSlots.map(slot=>'<button type="button" class="booking-slot'+(state.selectedSlot===slot?' selected':'')+'" aria-pressed="'+(state.selectedSlot===slot)+'" data-booking-slot="'+esc(slot)+'">'+esc(slot)+'</button>').join('');
+  const input=$('#bookingSlot');if(input)input.value=state.selectedSlot;
+}
+async function refreshAvailableSlots(day){
+  const requestId=++state.availabilityRequest;
+  const target=$('#bookingSlots');if(!target)return;
+  state.availableSlots=[];
+  target.innerHTML='<div class="slot-message">Carregando horários disponíveis...</div>';
+  try{
+    const result=await api('/api/availability?day='+encodeURIComponent(day));
+    if(requestId!==state.availabilityRequest||state.view!=='schedule'||state.slotDay!==day)return;
+    state.availableSlots=result.slots||[];
+    if(!state.availableSlots.includes(state.selectedSlot))state.selectedSlot='';
+    if(!state.availableSlots.length)openBookingCapacityModal();
+    renderAvailableSlots();
+  }catch(error){
+    if(requestId!==state.availabilityRequest||state.view!=='schedule'||state.slotDay!==day)return;
+    target.innerHTML='<div class="slot-message error">'+esc(error.message)+'</div>';
+  }
 }
 async function refreshSupplierBookings(){
   try{
@@ -341,6 +366,8 @@ document.addEventListener('click',async e=>{
   const auth=e.target.closest('[data-auth]');if(auth)return showAuth(auth.dataset.auth);
   const view=e.target.closest('[data-view]');if(view)return navigate(view.dataset.view);
   const history=e.target.closest('[data-history-open]');if(history)return openHistoryModal();
+  const bookingSlot=e.target.closest('[data-booking-slot]');
+  if(bookingSlot){state.selectedSlot=bookingSlot.dataset.bookingSlot;renderAvailableSlots();return}
   const tab=e.target.closest('[data-booktab]');
   if(tab){
     state.bookTab=tab.dataset.booktab;
@@ -392,9 +419,11 @@ document.addEventListener('change',e=>{
   if(e.target.id==='bookingDay'){
     if(!e.target.value)return;
     const minimum=firstAvailableDeliveryDay();
-    if(e.target.value<minimum){e.target.value=minimum;state.slotDay=minimum;toast('O agendamento deve ser feito a partir do próximo dia disponível.',true);return}
-    if(isSunday(e.target.value)){const next=nextOpenDay(dateOffset(e.target.value,1));e.target.value=next;state.slotDay=next;toast('Domingos não recebem agendamentos. Selecionamos '+dateBR(next)+'.',true);return}
+    if(e.target.value<minimum){e.target.value=minimum;state.slotDay=minimum;state.selectedSlot='';refreshAvailableSlots(state.slotDay);toast('O agendamento deve ser feito a partir do próximo dia disponível.',true);return}
+    if(isSunday(e.target.value)){const next=nextOpenDay(dateOffset(e.target.value,1));e.target.value=next;state.slotDay=next;state.selectedSlot='';refreshAvailableSlots(state.slotDay);toast('Domingos não recebem agendamentos. Selecionamos '+dateBR(next)+'.',true);return}
     state.slotDay=e.target.value;
+    state.selectedSlot='';
+    refreshAvailableSlots(state.slotDay);
   }
   if(e.target.id==='userRole')updateUserRoleSupplierVisibility();
   if(e.target.id==='scheduleInterval')updateDailyLimitPreview();
@@ -422,12 +451,14 @@ document.addEventListener('submit',async e=>{
     if(form.id==='bookingForm'){
       if(state.user.role==='admin'&&!values.supplier_id)throw new Error('Selecione um fornecedor.');
       if(!values.day||values.day<firstAvailableDeliveryDay()||isSunday(values.day))throw new Error('Escolha uma data a partir do próximo dia disponível. Domingos não recebem agendamentos.');
+      if(!values.slot||!state.availableSlots.includes(values.slot))throw new Error('Selecione um horário disponível antes de confirmar.');
       values.weight_kg=Number(values.weight_kg);
       values.item_count=Number(values.item_count);
       values.box_count=Number(values.box_count);
       const r=await api('/api/bookings','POST',values);
       toast('Agendamento confirmado para '+r.booking.slot+'.');
       openTicket(r.booking);
+      state.selectedSlot='';
       renderSchedule();
     }
     if(form.id==='supplierForm'){
@@ -471,7 +502,8 @@ document.addEventListener('submit',async e=>{
   }catch(err){
     const message=String(err.message||'');
     const normalized=message.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-    if(form.id==='bookingForm'&&((normalized.includes('limite de ')&&normalized.includes('veiculos'))||normalized.includes('todos os horarios')||normalized.includes('horarios desta data')))openBookingCapacityModal();
+    if(form.id==='bookingForm'&&normalized.includes('horario selecionado')){state.selectedSlot='';refreshAvailableSlots(state.slotDay);toast('Esse horário acabou de ser preenchido. Selecione outro horário disponível.',true)}
+    else if(form.id==='bookingForm'&&((normalized.includes('limite de ')&&normalized.includes('veiculos'))||normalized.includes('todos os horarios')||normalized.includes('horarios desta data')))openBookingCapacityModal();
     else toast(message,true);
   }
   finally{if(form.isConnected)submitButton(form,false)}

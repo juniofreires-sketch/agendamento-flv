@@ -115,6 +115,14 @@ export async function api(path,method='GET',body){
   if(p==='/api/logout'&&method==='POST'){
     const {error}=await supabase.auth.signOut();fail(error);return {ok:true};
   }
+  if(p==='/api/availability'&&method==='GET'){
+    const profile=await signedInProfile();
+    if(!profile||profile.status!=='active'||!['admin','supplier'].includes(profile.role))throw new Error('Este perfil não pode consultar horários de agendamento.');
+    const day=url.searchParams.get('day')||'';
+    const {data,error}=await supabase.rpc('available_booking_slots',{p_day:day});
+    fail(error);
+    return {slots:(data||[]).map(row=>String(row.slot).slice(0,5))};
+  }
   if(p==='/api/bookings'&&method==='GET'){
     const profile=await signedInProfile();
     if(profile?.role==='commercial')throw new Error('O perfil comercial não tem acesso à lista de agendamentos.');
@@ -133,6 +141,7 @@ export async function api(path,method='GET',body){
     const payload={
       supplier_id:body.supplier_id ? Number(body.supplier_id) : null,
       day:body.day,
+      slot:body.slot,
       order_number:body.order_number||null,
       invoice_number:body.invoice_number||null,
       weight_kg:Number(body.weight_kg),

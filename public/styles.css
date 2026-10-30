@@ -172,6 +172,14 @@ h1,h2,h3,.stat-value,.side-brand strong,.ticket-number{font-family:Inter,Arial,s
 #userRoleModalContent{padding:22px}
 .user-item>div:first-child{min-width:0;overflow-wrap:anywhere}
 .my-bookings{max-width:880px}
+.booking-time-field{margin-top:20px}
+.booking-slot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px;margin-top:10px}
+.booking-slot{min-height:47px;border:1px solid #cbdcf3;border-radius:10px;background:#fff;color:#193c69;font:inherit;font-size:14px;font-weight:800;cursor:pointer;transition:background .15s,border-color .15s,box-shadow .15s,color .15s}
+.booking-slot:hover{border-color:#2b7fff;background:#f4f8ff}
+.booking-slot:focus-visible{outline:3px solid #d8e8ff;outline-offset:2px}
+.booking-slot.selected{border-color:#176bff;background:#176bff;color:#fff;box-shadow:0 5px 14px rgba(23,107,255,.2)}
+.slot-message{grid-column:1/-1;padding:14px 15px;border:1px dashed #cbdcf3;border-radius:10px;background:#f7faff;color:#7186a3;font-size:13px;line-height:1.5}
+.slot-message.error{border-color:#f1d0c9;background:#fff8f6;color:#a34d42}
 .capacity-backdrop{z-index:120;background:rgba(16,35,64,.68);backdrop-filter:blur(6px)}
 .capacity-dialog{position:relative;width:min(100%,538px);padding:38px 39px 35px;border:2px solid #172338;border-radius:22px;background:#fff;box-shadow:0 30px 90px rgba(0,20,58,.38);text-align:left;animation:capacity-enter .22s ease-out;overflow:hidden}
 .capacity-dialog:before{content:'';position:absolute;left:0;right:0;top:0;height:4px;background:#176bff}

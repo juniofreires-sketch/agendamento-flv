@@ -27,10 +27,10 @@ create index if not exists profiles_supplier_idx on public.profiles(supplier_id)
 create table if not exists public.scheduling_settings (
   id smallint primary key default 1 check (id=1),
   start_time time not null default time '05:00',
-  end_time time not null default time '10:00',
+  end_time time not null default time '09:00',
   interval_minutes integer not null default 30 check (interval_minutes in (30,60)),
-  vehicles_per_slot integer not null default 5 check (vehicles_per_slot between 1 and 10000),
-  daily_vehicle_limit integer not null default 55 check (daily_vehicle_limit between 1 and 1000000),
+  vehicles_per_slot integer not null default 9 check (vehicles_per_slot between 1 and 10000),
+  daily_vehicle_limit integer not null default 81 check (daily_vehicle_limit between 1 and 1000000),
   updated_by uuid references auth.users(id) on delete set null,
   updated_at timestamptz not null default now(),
   constraint valid_scheduling_window check (
@@ -170,10 +170,9 @@ declare
   requester public.profiles%rowtype;
   config public.scheduling_settings%rowtype;
   local_day date := (now() at time zone 'America/Sao_Paulo')::date;
-  local_time time := (now() at time zone 'America/Sao_Paulo')::time;
   selected_slot time;
   daily_count integer;
-  window_message text;
+  slot_count integer;
 begin
   if (select auth.uid()) is null then raise exception 'Faça login para continuar.'; end if;
   select * into requester from public.profiles where id=(select auth.uid());
@@ -184,7 +183,6 @@ begin
     raise exception 'Este perfil não tem permissão para criar agendamentos.';
   end if;
   select * into config from public.scheduling_settings where id=1 for share;
-  window_message := pg_catalog.format('Os agendamentos são feitos de segunda a sábado, das %s às %s. Para uma entrega fora dessa janela, entre em contato com o setor comercial.',pg_catalog.to_char(config.start_time,'HH24:MI'),pg_catalog.to_char(config.end_time,'HH24:MI'));
   if requester.role <> 'admin' then
     new.supplier_id := requester.supplier_id;
   end if;
@@ -201,23 +199,17 @@ begin
   if daily_count >= config.daily_vehicle_limit then
     raise exception 'O limite de % veículos para esta data foi atingido. Escolha outro dia ou entre em contato com o setor comercial.',config.daily_vehicle_limit;
   end if;
-  select c.slot into selected_slot
-  from (
-    select (config.start_time + pg_catalog.make_interval(mins => slot_range.slot_index * config.interval_minutes))::time as slot
+  selected_slot := new.slot;
+  if selected_slot is null or not exists (
+    select 1
     from pg_catalog.generate_series(0, floor(extract(epoch from (config.end_time-config.start_time))/(config.interval_minutes*60))::integer) as slot_range(slot_index)
-  ) c
-  where (new.day > local_day or c.slot >= local_time)
-    and (
-      select count(*) from public.bookings b
-      where b.day=new.day and b.slot=c.slot and b.status='active'
-    ) < config.vehicles_per_slot
-  order by c.slot
-  limit 1;
-  if selected_slot is null then
-    if new.day=local_day and local_time > config.end_time then
-      raise exception 'O horário de hoje terminou às %. Para entregas fora da janela, entre em contato com o setor comercial.',pg_catalog.to_char(config.end_time,'HH24:MI');
-    end if;
-    raise exception 'Todos os horários desta data estão completos. Escolha outro dia ou entre em contato com o setor comercial.';
+    where (config.start_time + pg_catalog.make_interval(mins => slot_range.slot_index * config.interval_minutes))::time=selected_slot
+  ) then
+    raise exception 'Selecione um horário válido para esta data.';
+  end if;
+  select count(*) into slot_count from public.bookings b where b.day=new.day and b.slot=selected_slot and b.status='active';
+  if slot_count >= config.vehicles_per_slot then
+    raise exception 'O horário selecionado acabou de ser preenchido. Atualize a disponibilidade e escolha outro horário.';
   end if;
   new.slot := selected_slot;
   new.user_id := (select auth.uid());
@@ -229,6 +221,42 @@ $$;
 revoke all on function private.assign_booking() from public, anon, authenticated;
 create trigger assign_flv_booking
 before insert on public.bookings for each row execute function private.assign_booking();
+
+create or replace function public.available_booking_slots(p_day date)
+returns table(slot time without time zone) language plpgsql security definer set search_path = ''
+as $$
+declare
+  requester public.profiles%rowtype;
+  config public.scheduling_settings%rowtype;
+  local_day date := (now() at time zone 'America/Sao_Paulo')::date;
+  daily_count integer;
+begin
+  if (select auth.uid()) is null then raise exception 'Faça login para consultar horários.'; end if;
+  select * into requester from public.profiles where id=(select auth.uid());
+  if requester.id is null or requester.status <> 'active' then
+    raise exception 'Seu cadastro precisa estar aprovado para consultar horários.';
+  end if;
+  if requester.role not in ('admin','supplier') then
+    raise exception 'Este perfil não pode consultar horários de agendamento.';
+  end if;
+  if p_day is null or p_day <= local_day or extract(dow from p_day)=0 then
+    raise exception 'Escolha uma data disponível a partir de amanhã. Domingos não recebem agendamentos.';
+  end if;
+  select * into config from public.scheduling_settings where id=1;
+  select count(*) into daily_count from public.bookings b where b.day=p_day and b.status='active';
+  if daily_count >= config.daily_vehicle_limit then return; end if;
+  return query
+    select candidate.available_slot
+    from (
+      select (config.start_time + pg_catalog.make_interval(mins => slot_range.slot_index * config.interval_minutes))::time as available_slot
+      from pg_catalog.generate_series(0, floor(extract(epoch from (config.end_time-config.start_time))/(config.interval_minutes*60))::integer) as slot_range(slot_index)
+    ) candidate
+    where (select count(*) from public.bookings b where b.day=p_day and b.slot=candidate.available_slot and b.status='active') < config.vehicles_per_slot
+    order by candidate.available_slot;
+end;
+$$;
+revoke all on function public.available_booking_slots(date) from public, anon, authenticated;
+grant execute on function public.available_booking_slots(date) to authenticated;
 
 create or replace function private.cancel_booking_guard()
 returns trigger language plpgsql set search_path = ''
