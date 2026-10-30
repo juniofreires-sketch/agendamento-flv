@@ -87,6 +87,11 @@ const slotsFor = settings => {
     return String(Math.floor(minute/60)).padStart(2,'0')+':'+String(minute%60).padStart(2,'0');
   });
 };
+const dailyLimitFor = settings => slotsFor(settings).length * Number(settings.vehicles_per_slot);
+{
+  const settings=getSchedulingSettings();
+  db.prepare("UPDATE scheduling_settings SET daily_vehicle_limit=? WHERE id='global'").run(dailyLimitFor(settings));
+}
 const commercialMessage = settings => `Os agendamentos são feitos de segunda a sábado, das ${settings.start_time} às ${settings.end_time}. Para uma entrega fora dessa janela, entre em contato com o setor comercial.`;
 const zone = 'America/Sao_Paulo';
 const nowParts = () => {
@@ -100,7 +105,7 @@ const isSunday = day => new Date(day + 'T00:00:00Z').getUTCDay() === 0;
 const allowedSlots = day => {
   const settings = getSchedulingSettings();
   const now = nowParts();
-  if (!isValidDay(day) || isSunday(day) || day < now.day) return [];
+  if (!isValidDay(day) || isSunday(day) || day <= now.day) return [];
   return slotsFor(settings).filter(slot => day > now.day || slot >= now.time);
 };
 const json = (res, status, body, headers={}) => {
@@ -223,7 +228,7 @@ const server = http.createServer(async (req,res) => {
       const settings = getSchedulingSettings();
       const supplierId = user.role === 'admin' ? Number(b.supplier_id) : user.supplier_id;
       if (!db.prepare('SELECT id FROM suppliers WHERE id=?').get(supplierId)) return fail(res,400,'Selecione um fornecedor válido.');
-      if (!isValidDay(day) || isSunday(day) || day < nowParts().day) return fail(res,400,commercialMessage(settings));
+      if (!isValidDay(day) || isSunday(day) || day <= nowParts().day) return fail(res,400,'Os agendamentos estão disponíveis de segunda a sábado, somente a partir do dia seguinte. Para entregas fora da janela, entre em contato com o setor comercial.');
       if (!Number.isFinite(weight) || weight <= 0 || !Number.isInteger(items) || items < 0 || !Number.isInteger(boxes) || boxes < 0) return fail(res,400,'Informe peso positivo e quantidades inteiras maiores ou iguais a zero.');
       if (!vehicleTypes.includes(b.vehicle_type) || !cargoTypes.includes(b.cargo_type)) return fail(res,400,'Selecione o tipo de veículo e o tipo de carga.');
       const order = String(b.order_number||'').trim().slice(0,80), invoice = String(b.invoice_number||'').trim().slice(0,80);
@@ -286,12 +291,13 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'POST' && p === '/api/admin/settings') {
       if (!requireUser(req,res,true)) return;
-      const b=await readBody(req), start=String(b.start_time||''), end=String(b.end_time||''), interval=Number(b.interval_minutes), perSlot=Number(b.vehicles_per_slot), perDay=Number(b.daily_vehicle_limit);
+      const b=await readBody(req), start=String(b.start_time||''), end=String(b.end_time||''), interval=Number(b.interval_minutes), perSlot=Number(b.vehicles_per_slot);
       const timePattern=/^(?:[01]\d|2[0-3]):[0-5]\d$/;
       const startMinutes=timePattern.test(start)?Number(start.slice(0,2))*60+Number(start.slice(3)):NaN;
       const endMinutes=timePattern.test(end)?Number(end.slice(0,2))*60+Number(end.slice(3)):NaN;
-      if(!Number.isFinite(startMinutes)||!Number.isFinite(endMinutes)||endMinutes<=startMinutes||![30,60].includes(interval)||((endMinutes-startMinutes)%interval)!==0||(startMinutes%30!==0||endMinutes%30!==0)||(interval===60&&(startMinutes%60!==0||endMinutes%60!==0))||![perSlot,perDay].every(n=>Number.isInteger(n)&&n>0&&n<=10000))
+      if(!Number.isFinite(startMinutes)||!Number.isFinite(endMinutes)||endMinutes<=startMinutes||![30,60].includes(interval)||((endMinutes-startMinutes)%interval)!==0||(startMinutes%30!==0||endMinutes%30!==0)||(interval===60&&(startMinutes%60!==0||endMinutes%60!==0))||!Number.isInteger(perSlot)||perSlot<1||perSlot>10000)
         return fail(res,400,'Confira os horários, o intervalo (30 ou 60 minutos) e os limites de veículos.');
+      const perDay=(Math.floor((endMinutes-startMinutes)/interval)+1)*perSlot;
       db.prepare("UPDATE scheduling_settings SET start_time=?,end_time=?,interval_minutes=?,vehicles_per_slot=?,daily_vehicle_limit=? WHERE id='global'").run(start,end,interval,perSlot,perDay);
       return json(res,200,{scheduling:getSchedulingSettings()});
     }

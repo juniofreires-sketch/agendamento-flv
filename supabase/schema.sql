@@ -30,7 +30,7 @@ create table if not exists public.scheduling_settings (
   end_time time not null default time '10:00',
   interval_minutes integer not null default 30 check (interval_minutes in (30,60)),
   vehicles_per_slot integer not null default 5 check (vehicles_per_slot between 1 and 10000),
-  daily_vehicle_limit integer not null default 55 check (daily_vehicle_limit between 1 and 10000),
+  daily_vehicle_limit integer not null default 55 check (daily_vehicle_limit between 1 and 1000000),
   updated_by uuid references auth.users(id) on delete set null,
   updated_at timestamptz not null default now(),
   constraint valid_scheduling_window check (
@@ -39,6 +39,9 @@ create table if not exists public.scheduling_settings (
     and mod(extract(epoch from start_time)::integer,1800)=0
     and mod(extract(epoch from end_time)::integer,1800)=0
     and (interval_minutes=30 or (extract(minute from start_time)=0 and extract(minute from end_time)=0))
+  ),
+  constraint daily_vehicle_limit_matches_window check (
+    daily_vehicle_limit = ((extract(epoch from (end_time-start_time))::integer/(interval_minutes*60)+1)*vehicles_per_slot)
   )
 );
 insert into public.scheduling_settings(id) values (1) on conflict (id) do nothing;
@@ -188,8 +191,8 @@ begin
   if new.supplier_id is null or not exists(select 1 from public.suppliers where id=new.supplier_id) then
     raise exception 'Selecione um fornecedor válido.';
   end if;
-  if new.day < local_day or extract(dow from new.day)=0 then
-    raise exception '%', window_message;
+  if new.day <= local_day or extract(dow from new.day)=0 then
+    raise exception 'Os agendamentos estão disponíveis de segunda a sábado, somente a partir do dia seguinte. Para entregas fora da janela, entre em contato com o setor comercial.';
   end if;
 
   -- A trava por dia sincroniza limites de horário e o limite diário entre solicitações simultâneas.
@@ -385,6 +388,8 @@ create or replace function public.admin_update_scheduling_settings(
 )
 returns void language plpgsql security definer set search_path = ''
 as $$
+declare
+  calculated_daily_limit integer;
 begin
   if (select auth.uid()) is null or not (select private.is_admin()) then
     raise exception 'Apenas administradores podem alterar a sistemática.';
@@ -395,13 +400,16 @@ begin
      or mod(extract(epoch from p_start_time)::integer,1800)<>0
      or mod(extract(epoch from p_end_time)::integer,1800)<>0
      or (p_interval_minutes=60 and (extract(minute from p_start_time)<>0 or extract(minute from p_end_time)<>0))
-     or p_vehicles_per_slot not between 1 and 10000
-     or p_daily_vehicle_limit not between 1 and 10000 then
+     or p_vehicles_per_slot not between 1 and 10000 then
     raise exception 'Confira os horários, o intervalo (30 ou 60 minutos) e os limites de veículos.';
+  end if;
+  calculated_daily_limit := ((extract(epoch from (p_end_time-p_start_time))::integer/(p_interval_minutes*60)+1)*p_vehicles_per_slot);
+  if calculated_daily_limit not between 1 and 1000000 then
+    raise exception 'O limite diário calculado está fora do intervalo permitido.';
   end if;
   update public.scheduling_settings
     set start_time=p_start_time,end_time=p_end_time,interval_minutes=p_interval_minutes,
-        vehicles_per_slot=p_vehicles_per_slot,daily_vehicle_limit=p_daily_vehicle_limit,
+        vehicles_per_slot=p_vehicles_per_slot,daily_vehicle_limit=calculated_daily_limit,
         updated_by=(select auth.uid()),updated_at=now()
     where id=1;
 end;

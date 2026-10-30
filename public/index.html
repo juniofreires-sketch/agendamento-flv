@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1f40">
   <title>Portal FLV · Agendamento de entregas</title>
-  <link rel="stylesheet" href="/styles.css?v=5">
+  <link rel="stylesheet" href="/styles.css?v=6">
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -63,6 +63,17 @@
       <div id="userRoleModalContent"></div>
     </div>
   </div>
-  <script type="module" src="/app.js?v=5"></script>
+  <div id="bookingCapacityModal" class="modal-backdrop capacity-backdrop hidden" role="alertdialog" aria-modal="true" aria-labelledby="bookingCapacityTitle" aria-describedby="bookingCapacityMessage">
+    <section class="capacity-dialog">
+      <button type="button" id="closeBookingCapacity" class="capacity-close" aria-label="Fechar">×</button>
+      <div class="capacity-icon" aria-hidden="true">!</div>
+      <p class="capacity-eyebrow">AGENDA DESTA DATA ENCERRADA</p>
+      <h2 id="bookingCapacityTitle">Limite diário atingido</h2>
+      <p id="bookingCapacityMessage" class="capacity-message"></p>
+      <p class="capacity-note">Escolha outra data disponível para continuar. Se precisar de uma entrega fora da janela, entre em contato com o setor comercial.</p>
+      <button type="button" class="btn btn-primary capacity-button" data-capacity-close>Entendi</button>
+    </section>
+  </div>
+  <script type="module" src="/app.js?v=6"></script>
 </body>
 </html>

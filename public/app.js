@@ -18,6 +18,8 @@ const dateOffset = (day, n) => {const d=new Date(day+'T12:00:00Z');d.setUTCDate(
 const firstOfMonth = day => day.slice(0,7)+'-01';
 const lastOfMonth = day => {const d=new Date(day+'T12:00:00Z');d.setUTCMonth(d.getUTCMonth()+1,0);return d.toISOString().slice(0,10)};
 const nextOpenDay = day => {let x=day;while(new Date(x+'T12:00:00Z').getUTCDay()===0)x=dateOffset(x,1);return x};
+const isSunday = day => new Date(day+'T12:00:00Z').getUTCDay()===0;
+const firstAvailableDeliveryDay = () => nextOpenDay(dateOffset(today(),1));
 const toast = (message,error=false) => {const el=$('#toast');el.textContent=message;el.className='toast show'+(error?' error':'');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.className='toast',4500)};
 const submitButton = (form, busy) => {const button=form.querySelector('button[type="submit"]');if(button){button.disabled=busy;button.dataset.text ||= button.textContent;button.textContent=busy?'Aguarde...':button.dataset.text}};
 const supplierOptions = (selected='',includeAll=false) => (includeAll?'<option value="">Todos os fornecedores</option>':'<option value="">Selecione um fornecedor</option>')+state.meta.suppliers.map(s=>'<option value="'+s.id+'"'+(String(selected)===String(s.id)?' selected':'')+'>'+esc(s.name)+'</option>').join('');
@@ -50,7 +52,6 @@ function openSupplierCombo(combo){
   renderComboResults(combo);
   search.focus();
 }
-
 const eyeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
 const lockIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>';
 const mailIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg>';
@@ -90,7 +91,7 @@ function showApp(){
   document.querySelectorAll('.nav-link[data-view]').forEach(el=>{
     el.classList.toggle('hidden',!views.includes(el.dataset.view));
   });
-  if(!state.dashFrom){state.dashFrom=firstOfMonth(today());state.dashTo=lastOfMonth(today());state.bookFrom=dateOffset(today(),-90);state.bookTo=dateOffset(today(),90);state.historyFrom=dateOffset(today(),-365);state.historyTo=today();state.slotDay=nextOpenDay(state.meta.current_time >= state.meta.scheduling.end_time ? dateOffset(today(),1) : today())}
+  if(!state.dashFrom){state.dashFrom=firstOfMonth(today());state.dashTo=lastOfMonth(today());state.bookFrom=dateOffset(today(),-90);state.bookTo=dateOffset(today(),90);state.historyFrom=dateOffset(today(),-365);state.historyTo=today();state.slotDay=firstAvailableDeliveryDay()}
   if(!views.includes(state.view))state.view=defaultView(state.user.role);
   navigate(state.view);
 }
@@ -149,9 +150,11 @@ async function renderDashboard(){
   return supplierCombo('supplier');
 }
 function renderSchedule(){
+  const minimumDay=firstAvailableDeliveryDay();
+  if(!state.slotDay||state.slotDay<minimumDay||isSunday(state.slotDay))state.slotDay=minimumDay;
   $('#viewContent').innerHTML=pageHead('AGENDAMENTO','Nova entrega','Preencha os dados para solicitar o agendamento da entrega.')+
   '<div class="schedule-grid"><div class="card form-card"><form id="bookingForm"><div class="form-section-title"><span>1</span> Fornecedor e data</div>'+supplierField()+
-  '<div class="field"><label for="bookingDay">Data da entrega *</label><input id="bookingDay" name="day" type="date" min="'+today()+'" value="'+state.slotDay+'" required><small>Atendimento de segunda a sábado.</small></div>'+
+  '<div class="field"><label for="bookingDay">Data da entrega *</label><input id="bookingDay" name="day" type="date" min="'+minimumDay+'" value="'+state.slotDay+'" required><small>Agendamentos somente a partir do próximo dia disponível. Domingos não recebem agendamentos.</small></div>'+
   '<div class="form-divider"></div><div class="form-section-title"><span>2</span> Dados da carga</div>'+
   '<div class="field-row"><div class="field"><label for="orderNumber">Número do pedido</label><input id="orderNumber" name="order_number" maxlength="80" placeholder="Ex: 12345"></div><div class="field"><label for="invoiceNumber">Nota fiscal</label><input id="invoiceNumber" name="invoice_number" maxlength="80" placeholder="Ex: 98765"></div></div>'+
   '<div class="field-row"><div class="field"><label for="weight">Peso da carga (kg) *</label><input id="weight" name="weight_kg" type="number" min="0.01" step="0.01" placeholder="Ex: 1250" required></div><div class="field"><label for="items">Quantidade de itens *</label><input id="items" name="item_count" type="number" min="0" step="1" placeholder="Ex: 80" required></div></div>'+
@@ -243,11 +246,23 @@ function updateUserRoleSupplierVisibility(){
   const role=$('#userRole')?.value;
   if(field){field.hidden=role!=='supplier';$('#userRoleSupplier').required=role==='supplier'}
 }
+function updateDailyLimitPreview(){
+  const start=$('#scheduleStart'),end=$('#scheduleEnd'),intervalField=$('#scheduleInterval'),capacityField=$('#scheduleCapacity'),limit=$('#scheduleDailyLimit');
+  if(!start||!end||!intervalField||!capacityField||!limit)return;
+  const interval=Number(intervalField.value),capacity=Number(capacityField.value);
+  const minute=value=>/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)?Number(value.slice(0,2))*60+Number(value.slice(3)):NaN;
+  const startMinute=minute(start.value),endMinute=minute(end.value),duration=endMinute-startMinute;
+  const valid=[30,60].includes(interval)&&Number.isInteger(capacity)&&capacity>0&&duration>0&&duration%interval===0&&startMinute%30===0&&endMinute%30===0&&(interval!==60||(startMinute%60===0&&endMinute%60===0));
+  limit.value=valid?String((Math.floor(duration/interval)+1)*capacity):'';
+  const step=interval*60;
+  start.step=String(step);end.step=String(step);
+}
 function renderAdmin(){
   const rules=state.meta.scheduling;
   $('#viewContent').innerHTML=pageHead('ADMINISTRAÇÃO','Configurações','Cadastre fornecedores e configure as regras que valem para todos os agendamentos.')+
-  '<div class="card section-card"><div class="section-head"><div><h3>Sistemática global de agendamento</h3><p>As regras salvas serão aplicadas a todos os fornecedores.</p></div></div><form id="schedulingForm" class="settings-form"><div class="field-row"><div class="field"><label for="scheduleStart">Início da janela</label><input id="scheduleStart" name="start_time" type="time" step="1800" value="'+esc(rules.start_time)+'" required></div><div class="field"><label for="scheduleEnd">Final da janela</label><input id="scheduleEnd" name="end_time" type="time" step="1800" value="'+esc(rules.end_time)+'" required><small>O horário final é o início da última faixa disponível.</small></div></div><div class="field-row"><div class="field"><label for="scheduleInterval">Intervalo entre faixas</label><select id="scheduleInterval" name="interval_minutes"><option value="30"'+(Number(rules.interval_minutes)===30?' selected':'')+'>A cada meia hora</option><option value="60"'+(Number(rules.interval_minutes)===60?' selected':'')+'>A cada hora</option></select></div><div class="field"><label for="scheduleCapacity">Carros por faixa</label><input id="scheduleCapacity" name="vehicles_per_slot" type="number" min="1" max="10000" step="1" value="'+esc(rules.vehicles_per_slot)+'" required></div></div><div class="field"><label for="scheduleDailyLimit">Limite de veículos por dia</label><input id="scheduleDailyLimit" name="daily_vehicle_limit" type="number" min="1" max="10000" step="1" value="'+esc(rules.daily_vehicle_limit)+'" required></div><button type="submit" class="btn btn-primary">Salvar sistemática</button></form></div>'+
+  '<div class="card section-card"><div class="section-head"><div><h3>Sistemática global de agendamento</h3><p>As regras salvas serão aplicadas a todos os fornecedores.</p></div></div><form id="schedulingForm" class="settings-form"><div class="field-row"><div class="field"><label for="scheduleStart">Início da janela</label><input id="scheduleStart" name="start_time" type="time" step="1800" value="'+esc(rules.start_time)+'" required></div><div class="field"><label for="scheduleEnd">Final da janela</label><input id="scheduleEnd" name="end_time" type="time" step="1800" value="'+esc(rules.end_time)+'" required><small>O horário final é o início da última faixa disponível.</small></div></div><div class="field-row"><div class="field"><label for="scheduleInterval">Intervalo entre faixas</label><select id="scheduleInterval" name="interval_minutes"><option value="30"'+(Number(rules.interval_minutes)===30?' selected':'')+'>A cada meia hora</option><option value="60"'+(Number(rules.interval_minutes)===60?' selected':'')+'>A cada hora</option></select></div><div class="field"><label for="scheduleCapacity">Carros por faixa</label><input id="scheduleCapacity" name="vehicles_per_slot" type="number" min="1" max="10000" step="1" value="'+esc(rules.vehicles_per_slot)+'" required></div></div><div class="field"><label for="scheduleDailyLimit">Limite de veículos por dia</label><input id="scheduleDailyLimit" name="daily_vehicle_limit" type="number" min="1" max="1000000" step="1" value="'+esc(rules.daily_vehicle_limit)+'" readonly required><small>Calculado automaticamente: faixas disponíveis × carros por faixa.</small></div><button type="submit" class="btn btn-primary">Salvar sistemática</button></form></div>'+
   '<div class="card supplier-card admin-supplier-card"><div class="section-head"><div><h3>Novo fornecedor</h3><p>Somente administradores podem cadastrar empresas diretamente.</p></div></div><form id="supplierForm"><div class="field"><label for="newSupplier">Razão social</label><input id="newSupplier" name="name" minlength="3" maxlength="160" required placeholder="Nome completo do fornecedor"></div><button type="submit" class="btn btn-primary">Cadastrar fornecedor</button></form><div class="info-panel" style="margin-top:22px"><h3>Base cadastrada</h3><p><strong>'+state.meta.suppliers.length+' fornecedores</strong> disponíveis para seleção.</p></div></div>';
+  updateDailyLimitPreview();
 }function openTicket(b){
   $('#ticketContent').innerHTML='<div class="ticket"><div class="ticket-header"><small>SENHA PARA ENTREGA DE MERCADORIA</small><div class="ticket-number">'+String(b.id).padStart(3,'0')+'</div></div><p class="ticket-protocol">Apresente esta senha no check-in · Protocolo AGE-'+b.id+'</p>'+
   [['Data da entrega',dateBR(b.day)],['Horário agendado',b.slot],['Apresentação','05:00 às 05:00'],['Filial','ATACADAO DIA A DIA S.A. · 17.457.404/0023-17'],['Endereço','SETOR POLO DE D J KUBITSCHEK TR 5 CJ 1, S/N - SANTA MARIA - BRASILIA/DF - CEP 72549-710'],['Doca','FLV'],['Fornecedor',b.supplier_name],['Número do pedido',b.order_number||'—'],['Nota fiscal',b.invoice_number||'—'],['Peso da carga',formatWeight(b.weight_kg)+' kg'],['Quantidade de itens',formatNum(b.item_count)],['Quantidade de caixas',formatNum(b.box_count)],['Tipo de veículo',b.vehicle_type],['Tipo de carga',b.cargo_type],['Situação',b.status==='active'?'Confirmado':'Cancelado']].map(x=>'<div class="ticket-row"><span>'+esc(x[0])+'</span><strong>'+esc(x[1])+'</strong></div>').join('')+'<p class="ticket-footer">Apresente esta senha à portaria no dia da entrega.</p></div>';
@@ -255,6 +270,12 @@ function renderAdmin(){
   $('#printTicket').title=b.status==='active'?'Imprimir senha':'Agendamento cancelado';
   $('#ticketModal').classList.remove('hidden');
 }
+function openBookingCapacityModal(message){
+  $('#bookingCapacityMessage').textContent=message;
+  $('#bookingCapacityModal').classList.remove('hidden');
+  $('#closeBookingCapacity').focus();
+}
+function closeBookingCapacityModal(){$('#bookingCapacityModal').classList.add('hidden')}
 document.addEventListener('click',async e=>{
   const passwordToggle=e.target.closest('[data-password-toggle]');
   if(passwordToggle){
@@ -342,6 +363,7 @@ document.addEventListener('click',async e=>{
   if(e.target.id==='menuBtn'){$('#sidebar').classList.add('open');$('#mobileOverlay').classList.add('show')}
   if(e.target.id==='mobileOverlay'){$('#sidebar').classList.remove('open');$('#mobileOverlay').classList.remove('show')}
   if(e.target.id==='closeTicket'||e.target.id==='ticketModal')$('#ticketModal').classList.add('hidden');
+  if(e.target.id==='closeBookingCapacity'||e.target.id==='bookingCapacityModal'||e.target.closest('[data-capacity-close]'))closeBookingCapacityModal();
   if(e.target.id==='closeHistory'||e.target.id==='cancelHistory'||e.target.id==='historyModal')closeHistoryModal();
   if(e.target.id==='closeUserRole'||e.target.id==='cancelUserRole'||e.target.id==='userRoleModal')closeUserRoleModal();
   if(e.target.id==='printTicket')window.print();
@@ -349,9 +371,10 @@ document.addEventListener('click',async e=>{
 });
 document.addEventListener('input',e=>{
   if(e.target.matches('[data-combo-search]'))renderComboResults(e.target.closest('[data-supplier-combo]'),e.target.value);
+  if(['scheduleStart','scheduleEnd','scheduleCapacity'].includes(e.target.id))updateDailyLimitPreview();
 });
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){closeSupplierCombos();closeHistoryModal();closeUserRoleModal();return}
+  if(e.key==='Escape'){closeSupplierCombos();closeHistoryModal();closeUserRoleModal();closeBookingCapacityModal();return}
   if(e.key==='Enter'&&e.target.matches('[data-combo-search]')){
     const first=e.target.closest('[data-supplier-combo]').querySelector('[data-combo-option]');
     if(first){e.preventDefault();first.click()}
@@ -362,8 +385,15 @@ document.addEventListener('keydown',e=>{
   }
 });
 document.addEventListener('change',e=>{
-  if(e.target.id==='bookingDay')state.slotDay=e.target.value;
+  if(e.target.id==='bookingDay'){
+    if(!e.target.value)return;
+    const minimum=firstAvailableDeliveryDay();
+    if(e.target.value<minimum){e.target.value=minimum;state.slotDay=minimum;toast('O agendamento deve ser feito a partir do próximo dia disponível.',true);return}
+    if(isSunday(e.target.value)){const next=nextOpenDay(dateOffset(e.target.value,1));e.target.value=next;state.slotDay=next;toast('Domingos não recebem agendamentos. Selecionamos '+dateBR(next)+'.',true);return}
+    state.slotDay=e.target.value;
+  }
   if(e.target.id==='userRole')updateUserRoleSupplierVisibility();
+  if(e.target.id==='scheduleInterval')updateDailyLimitPreview();
 });
 document.addEventListener('submit',async e=>{
   const form=e.target;
@@ -387,6 +417,7 @@ document.addEventListener('submit',async e=>{
     }
     if(form.id==='bookingForm'){
       if(state.user.role==='admin'&&!values.supplier_id)throw new Error('Selecione um fornecedor.');
+      if(!values.day||values.day<firstAvailableDeliveryDay()||isSunday(values.day))throw new Error('Escolha uma data a partir do próximo dia disponível. Domingos não recebem agendamentos.');
       values.weight_kg=Number(values.weight_kg);
       values.item_count=Number(values.item_count);
       values.box_count=Number(values.box_count);
@@ -433,7 +464,12 @@ document.addEventListener('submit',async e=>{
       closeHistoryModal();
       showBookTab();
     }
-  }catch(err){toast(err.message,true)}
+  }catch(err){
+    const message=String(err.message||'');
+    const normalized=message.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    if(form.id==='bookingForm'&&((normalized.includes('limite de ')&&normalized.includes('veiculos'))||normalized.includes('todos os horarios')||normalized.includes('horarios desta data')))openBookingCapacityModal(message);
+    else toast(message,true);
+  }
   finally{if(form.isConnected)submitButton(form,false)}
 });
 (async()=>{try{state.meta=await api('/api/meta');const session=await api('/api/me');state.user=session.user;if(state.user)showApp();else if(session.pending)showRegistrationReceived('Seu cadastro está aguardando a aprovação da equipe.');else showAuth()}catch(e){$('#authContent').innerHTML='<div class="auth-inner"><h2>Não foi possível carregar o portal</h2><p class="subtext">'+esc(e.message)+'</p><button class="btn" onclick="location.reload()">Tentar novamente</button></div>'}})();
