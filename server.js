@@ -12,12 +12,27 @@ const db = new DatabaseSync(process.env.FLV_TEST_MODE === '1' ? ':memory:' : pat
 db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
 db.exec([
   'CREATE TABLE IF NOT EXISTS suppliers (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE)',
-  'CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN (\'admin\',\'supplier\')), status TEXT NOT NULL CHECK(status IN (\'active\',\'pending\')), supplier_id INTEGER REFERENCES suppliers(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)',
+  'CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN (\'admin\',\'supplier\')), status TEXT NOT NULL CHECK(status IN (\'active\',\'pending\')), supplier_id INTEGER REFERENCES suppliers(id), requested_supplier_name TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)',
   'CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires_at TEXT NOT NULL)',
-  'CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, supplier_id INTEGER NOT NULL REFERENCES suppliers(id), user_id TEXT NOT NULL REFERENCES users(id), day TEXT NOT NULL, slot TEXT NOT NULL, order_number TEXT, invoice_number TEXT, weight_kg REAL NOT NULL, item_count INTEGER NOT NULL, box_count INTEGER NOT NULL, vehicle_type TEXT NOT NULL, cargo_type TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN (\'active\',\'cancelled\')), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, cancelled_at TEXT)',
+  'CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, supplier_id INTEGER NOT NULL REFERENCES suppliers(id), user_id TEXT REFERENCES users(id) ON DELETE SET NULL, day TEXT NOT NULL, slot TEXT NOT NULL, order_number TEXT, invoice_number TEXT, weight_kg REAL NOT NULL, item_count INTEGER NOT NULL, box_count INTEGER NOT NULL, vehicle_type TEXT NOT NULL, cargo_type TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN (\'active\',\'cancelled\')), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, cancelled_at TEXT)',
   'CREATE INDEX IF NOT EXISTS bookings_day_slot ON bookings(day, slot, status)',
   'CREATE INDEX IF NOT EXISTS bookings_supplier ON bookings(supplier_id, day)'
 ].join(';\n') + ';');
+if (!db.prepare('PRAGMA table_info(users)').all().some(col => col.name === 'requested_supplier_name'))
+  db.exec('ALTER TABLE users ADD COLUMN requested_supplier_name TEXT');
+const bookingUserColumn = db.prepare('PRAGMA table_info(bookings)').all().find(col => col.name === 'user_id');
+if (bookingUserColumn?.notnull) {
+  db.exec(`PRAGMA foreign_keys=OFF;
+    BEGIN IMMEDIATE;
+    CREATE TABLE bookings_new (id INTEGER PRIMARY KEY AUTOINCREMENT, supplier_id INTEGER NOT NULL REFERENCES suppliers(id), user_id TEXT REFERENCES users(id) ON DELETE SET NULL, day TEXT NOT NULL, slot TEXT NOT NULL, order_number TEXT, invoice_number TEXT, weight_kg REAL NOT NULL, item_count INTEGER NOT NULL, box_count INTEGER NOT NULL, vehicle_type TEXT NOT NULL, cargo_type TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('active','cancelled')), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, cancelled_at TEXT);
+    INSERT INTO bookings_new SELECT * FROM bookings;
+    DROP TABLE bookings;
+    ALTER TABLE bookings_new RENAME TO bookings;
+    CREATE INDEX bookings_day_slot ON bookings(day, slot, status);
+    CREATE INDEX bookings_supplier ON bookings(supplier_id, day);
+    COMMIT;
+    PRAGMA foreign_keys=ON;`);
+}
 
 const seed = JSON.parse(fs.readFileSync(path.join(root, 'suppliers.json'), 'utf8'));
 const insertSupplier = db.prepare('INSERT OR IGNORE INTO suppliers(name) VALUES (?)');
@@ -113,6 +128,7 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'GET' && p === '/styles.css') return sendFile(res,'styles.css','text/css; charset=utf-8');
     if (req.method === 'GET' && p === '/app.js') return sendFile(res,'app.js','text/javascript; charset=utf-8');
     if (req.method === 'GET' && p === '/logo-dia-a-dia.png') return sendFile(res,'logo-dia-a-dia.png','image/png');
+    if (req.method === 'GET' && p === '/login-warehouse.png') return sendFile(res,'login-warehouse.png','image/png');
     if (p.startsWith('/api/') && !['GET','HEAD'].includes(req.method)) {
       const origin = req.headers.origin;
       if (origin && new URL(origin).host !== req.headers.host) return fail(res,403,'Origem não autorizada.');
@@ -125,7 +141,7 @@ const server = http.createServer(async (req,res) => {
       if (db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='admin'").get().n) return fail(res,403,'Administrador já configurado.');
       const b = await readBody(req);
       const name = String(b.name||'').trim(), email = String(b.email||'').trim().toLowerCase(), password = String(b.password||'');
-      if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email) || password.length < 10) return fail(res,400,'Informe nome, email válido e senha de pelo menos 10 caracteres.');
+      if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email) || password.length < 6) return fail(res,400,'Informe nome, email válido e senha de pelo menos 6 caracteres.');
       const id = randomBytes(16).toString('hex');
       db.prepare("INSERT INTO users(id,name,email,password_hash,role,status) VALUES (?,?,?,?, 'admin','active')").run(id,name,email,hashPassword(password));
       return createSession(res,{id,name,email,role:'admin',status:'active',supplier_id:null,supplier_name:null});
@@ -133,10 +149,12 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'POST' && p === '/api/register') {
       const b = await readBody(req);
       const name = String(b.name||'').trim(), email = String(b.email||'').trim().toLowerCase(), password = String(b.password||'');
-      const supplier = db.prepare('SELECT id FROM suppliers WHERE id=?').get(Number(b.supplier_id));
-      if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email) || password.length < 10 || !supplier) return fail(res,400,'Confira nome, email, senha (mínimo 10 caracteres) e fornecedor.');
+      if (email === 'junior.matheus64@gmail.com') return fail(res,400,'Este email está reservado para a administração.');
+      const supplier = b.supplier_id ? db.prepare('SELECT id FROM suppliers WHERE id=?').get(Number(b.supplier_id)) : null;
+      const requestedSupplier = String(b.supplier_name||'').trim().replace(/\s+/g,' ');
+      if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email) || password.length < 6 || (!supplier && (requestedSupplier.length < 3 || requestedSupplier.length > 160))) return fail(res,400,'Confira nome, email, senha (mínimo 6 caracteres) e fornecedor.');
       try {
-        db.prepare("INSERT INTO users(id,name,email,password_hash,role,status,supplier_id) VALUES (?,?,?,?, 'supplier','pending',?)").run(randomBytes(16).toString('hex'),name,email,hashPassword(password),supplier.id);
+        db.prepare("INSERT INTO users(id,name,email,password_hash,role,status,supplier_id,requested_supplier_name) VALUES (?,?,?,?, 'supplier','pending',?,?)").run(randomBytes(16).toString('hex'),name,email,hashPassword(password),supplier?.id||null,supplier?null:requestedSupplier);
       } catch { return fail(res,409,'Este email já está cadastrado.'); }
       return json(res,201,{message:'Cadastro recebido! Nossa equipe avaliará seus dados. Após a aprovação do administrador, você poderá acessar o portal.'});
     }
@@ -200,13 +218,40 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'GET' && p === '/api/admin/pending') {
       if (!requireUser(req,res,true)) return;
-      return json(res,200,{users:db.prepare("SELECT u.id,u.name,u.email,u.created_at,s.name AS supplier_name FROM users u JOIN suppliers s ON s.id=u.supplier_id WHERE u.status='pending' ORDER BY u.created_at").all()});
+      return json(res,200,{users:db.prepare("SELECT u.id,u.name,u.email,u.created_at,u.requested_supplier_name,coalesce(s.name,u.requested_supplier_name) AS supplier_name FROM users u LEFT JOIN suppliers s ON s.id=u.supplier_id WHERE u.status='pending' AND u.role='supplier' ORDER BY u.created_at").all()});
+    }
+    if (req.method === 'GET' && p === '/api/admin/users') {
+      if (!requireUser(req,res,true)) return;
+      return json(res,200,{users:db.prepare("SELECT u.id,u.name,u.email,u.status,u.created_at,u.requested_supplier_name,coalesce(s.name,u.requested_supplier_name) AS supplier_name FROM users u LEFT JOIN suppliers s ON s.id=u.supplier_id WHERE u.role='supplier' ORDER BY u.created_at DESC").all()});
     }
     if (req.method === 'POST' && /^\/api\/admin\/users\/[a-f0-9]+\/approve$/.test(p)) {
       if (!requireUser(req,res,true)) return;
       const id=p.split('/')[4];
-      const out=db.prepare("UPDATE users SET status='active' WHERE id=? AND status='pending' AND role='supplier'").run(id);
-      if (!out.changes) return fail(res,404,'Cadastro pendente não encontrado.');
+      const pending=db.prepare("SELECT * FROM users WHERE id=? AND status='pending' AND role='supplier'").get(id);
+      if (!pending) return fail(res,404,'Cadastro pendente não encontrado.');
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        let supplierId=pending.supplier_id;
+        if (!supplierId) {
+          db.prepare('INSERT OR IGNORE INTO suppliers(name) VALUES (?)').run(pending.requested_supplier_name);
+          supplierId=db.prepare('SELECT id FROM suppliers WHERE name=? COLLATE NOCASE').get(pending.requested_supplier_name).id;
+        }
+        db.prepare("UPDATE users SET status='active',supplier_id=? WHERE id=?").run(supplierId,id);
+        db.exec('COMMIT');
+      } catch (e) {db.exec('ROLLBACK');throw e}
+      return json(res,200,{ok:true});
+    }
+    if (req.method === 'POST' && /^\/api\/admin\/users\/[a-f0-9]+\/delete$/.test(p)) {
+      if (!requireUser(req,res,true)) return;
+      const id=p.split('/')[4];
+      const target=db.prepare("SELECT id FROM users WHERE id=? AND role='supplier'").get(id);
+      if (!target) return fail(res,404,'Usuário fornecedor não encontrado.');
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);
+        db.prepare('DELETE FROM users WHERE id=?').run(id);
+        db.exec('COMMIT');
+      } catch (e) {db.exec('ROLLBACK');throw e}
       return json(res,200,{ok:true});
     }
     if (req.method === 'POST' && p === '/api/admin/suppliers') {

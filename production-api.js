@@ -30,13 +30,13 @@ const bookingRow = row => ({
 const bookingSelect = 'id,supplier_id,user_id,day,slot,order_number,invoice_number,weight_kg,item_count,box_count,vehicle_type,cargo_type,status,created_at,cancelled_at,suppliers(name)';
 async function profileFor(user){
   const {data,error}=await supabase.from('profiles')
-    .select('id,name,email,role,status,supplier_id,suppliers(name)')
+    .select('id,name,email,role,status,supplier_id,requested_supplier_name,suppliers(name)')
     .eq('id',user.id).single();
   fail(error);
   if(!data) return null;
   return {
     id:data.id,name:data.name,email:data.email,role:data.role,status:data.status,
-    supplier_id:data.supplier_id,supplier_name:data.suppliers?.name || null
+    supplier_id:data.supplier_id,supplier_name:data.suppliers?.name || data.requested_supplier_name || null
   };
 }
 async function signedInProfile(){
@@ -64,11 +64,13 @@ export async function api(path,method='GET',body){
   if(p==='/api/register'&&method==='POST'){
     const email=String(body.email||'').trim().toLowerCase();
     if(email==='junior.matheus64@gmail.com')throw new Error('Este email já está reservado para a administração.');
-    if(!body?.supplier_id)throw new Error('Selecione um fornecedor.');
+    const supplierName=String(body.supplier_name||'').trim().replace(/\s+/g,' ');
+    if(!body?.supplier_id && (supplierName.length<3 || supplierName.length>160))
+      throw new Error('Selecione um fornecedor ou digite o nome da empresa.');
     const {data,error}=await supabase.auth.signUp({
       email,
       password:String(body.password||''),
-      options:{data:{name:String(body.name||'').trim(),supplier_id:Number(body.supplier_id)}}
+      options:{data:{name:String(body.name||'').trim(),supplier_id:body.supplier_id?Number(body.supplier_id):null,supplier_name:body.supplier_id?null:supplierName}}
     });
     fail(error);
     if(data.session)await supabase.auth.signOut();
@@ -128,10 +130,17 @@ export async function api(path,method='GET',body){
   }
   if(p==='/api/admin/pending'&&method==='GET'){
     const {data,error}=await supabase.from('profiles')
-      .select('id,name,email,created_at,suppliers(name)')
+      .select('id,name,email,created_at,requested_supplier_name,suppliers(name)')
       .eq('status','pending').eq('role','supplier').order('created_at');
     fail(error);
-    return {users:(data||[]).map(row=>({...row,supplier_name:row.suppliers?.name||''}))};
+    return {users:(data||[]).map(row=>({...row,supplier_name:row.suppliers?.name||row.requested_supplier_name||''}))};
+  }
+  if(p==='/api/admin/users'&&method==='GET'){
+    const {data,error}=await supabase.from('profiles')
+      .select('id,name,email,status,created_at,requested_supplier_name,suppliers(name)')
+      .eq('role','supplier').order('created_at',{ascending:false}).limit(2000);
+    fail(error);
+    return {users:(data||[]).map(row=>({...row,supplier_name:row.suppliers?.name||row.requested_supplier_name||''}))};
   }
   const approve=/^\/api\/admin\/users\/([a-f0-9-]+)\/approve$/.exec(p);
   if(approve&&method==='POST'){
@@ -139,6 +148,11 @@ export async function api(path,method='GET',body){
       .eq('id',approve[1]).eq('status','pending').eq('role','supplier').select('id').single();
     fail(error);if(!data)throw new Error('Cadastro pendente não encontrado.');
     return {ok:true};
+  }
+  const remove=/^\/api\/admin\/users\/([a-f0-9-]+)\/delete$/.exec(p);
+  if(remove&&method==='POST'){
+    const {error}=await supabase.rpc('admin_delete_supplier_user',{p_user_id:remove[1]});
+    fail(error);return {ok:true};
   }
   if(p==='/api/admin/suppliers'&&method==='POST'){
     const name=String(body.name||'').trim().replace(/\s+/g,' ');

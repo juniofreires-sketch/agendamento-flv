@@ -18,6 +18,9 @@ Na primeira abertura local, crie o acesso do administrador. O banco SQLite fica 
 
 - De segunda a sábado, das 05:00 às 10:00, com 5 reservas por faixa de meia hora.
 - Os fornecedores cadastram uma conta, aguardam aprovação e visualizam somente seus próprios dados.
+- O cadastro aceita um fornecedor da lista ou um nome digitado. Um nome novo entra na base quando o administrador aprova a conta.
+- A senha exige pelo menos 6 caracteres e pode ser exibida durante a digitação.
+- Fornecedores veem apenas a aba de agendamento, com suas entregas confirmadas e canceladas. Administradores veem todas as abas e podem aprovar ou excluir contas de fornecedores sem apagar o histórico das entregas.
 - O horário é atribuído pelo sistema; pedidos e notas fiscais são opcionais. Peso, itens, caixas, veículo e tipo de carga são obrigatórios.
 - A senha pode ser impressa. Agendamentos cancelados ficam disponíveis no histórico.
 - A planilha tinha 429 linhas e 409 razões sociais distintas; `suppliers.json` contém os nomes deduplicados.
@@ -33,6 +36,8 @@ pnpm build
 O build cria `dist/`, publicado segundo `vercel.json`. Antes de publicar em outro ambiente, crie um projeto Supabase novo, aplique `supabase/schema.sql` e `supabase/seed.sql` e ajuste as URLs de autenticação. Configure na hospedagem as mesmas duas variáveis de build. Nunca coloque uma chave `service_role` no navegador.
 
 O administrador inicial foi criado por um processo administrativo controlado para `junior.matheus64@gmail.com`. O cadastro público sempre exige um fornecedor e cria uma conta pendente. Somente o administrador pode aprová-la; até então, o fornecedor não acessa o portal.
+
+A senha inicial desse administrador está em `data/admin-initial-password.txt` somente neste computador e não foi enviada ao Git. Use esse conteúdo no portal publicado; a senha da conta Gmail não é a senha do portal.
 
 ## Ambiente de estudo publicado
 

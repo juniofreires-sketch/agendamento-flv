@@ -10,7 +10,7 @@ if(!url || !/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url)) throw new Error('C
 if(!key || !key.startsWith('sb_publishable_')) throw new Error('Configure SUPABASE_PUBLISHABLE_KEY do projeto novo.');
 const out=path.join(root,'dist');
 await fs.mkdir(out,{recursive:true});
-for(const name of ['index.html','styles.css','logo-dia-a-dia.png']){
+for(const name of ['index.html','styles.css','logo-dia-a-dia.png','login-warehouse.png']){
   await fs.copyFile(path.join(root,'public',name),path.join(out,name));
 }
 const source=await fs.readFile(path.join(root,'public','app.js'),'utf8');

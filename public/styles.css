@@ -114,3 +114,49 @@ h1,h2,h3,.stat-value,.side-brand strong,.ticket-number{font-family:Inter,Arial,s
 .registration-icon{display:grid;place-items:center;width:54px;height:54px;border-radius:16px;background:#e6f7ec;color:#236a49;font-size:30px;font-weight:800;margin-bottom:24px}
 .registration-panel{margin:0 0 24px}
 .registration-panel strong{display:block;margin-bottom:7px;color:#123f72}
+
+/* Tela de acesso conforme a referência do portal de fornecedores. */
+.auth-screen{grid-template-columns:54.8% 45.2%;background:#f7faff}
+.auth-intro{min-height:100vh;padding:50px clamp(38px,4.6vw,76px);background:linear-gradient(90deg,rgba(4,22,51,.9) 0%,rgba(4,25,57,.66) 54%,rgba(3,21,48,.35) 100%),url('/login-warehouse.png') center center/cover no-repeat}
+.auth-intro:after{left:-235px;bottom:-515px;width:670px;height:670px;border-color:rgba(83,151,255,.22);box-shadow:0 0 0 52px rgba(31,100,194,.13),0 0 0 118px rgba(31,100,194,.09);pointer-events:none}
+.hero-logo{width:191px;height:54px;padding:9px 17px;border-radius:9px;box-shadow:0 3px 18px rgba(139,188,255,.28)}
+.auth-hero-copy{position:relative;z-index:1;margin-top:clamp(50px,8vh,85px);max-width:620px}
+.auth-hero-copy .eyebrow{margin:0 0 37px;color:#69abff;font-size:13px;letter-spacing:.18em;position:relative}
+.auth-hero-copy .eyebrow:after{content:'';position:absolute;left:0;bottom:-15px;width:38px;height:3px;border-radius:4px;background:#4c9dff}
+.auth-intro h1{font-size:clamp(47px,5.1vw,73px);line-height:.99;letter-spacing:-.06em;margin:0 0 21px;color:#fff;font-weight:800}
+.auth-intro h1 em{display:block;color:#6cafff;font-style:normal}
+.intro-copy{font-size:18px;line-height:1.52;color:#d6e3f7;max-width:500px;margin:0}
+.intro-bottom{position:relative;z-index:1;margin-top:auto;color:#c7d6eb;font-size:12px;display:flex;align-items:center;gap:11px}
+.intro-bottom svg{width:22px;height:22px;color:#52a4ff;flex:none}
+.intro-bottom span{color:#69abff;padding:0 2px}
+.auth-card{position:relative;background:radial-gradient(ellipse 330px 480px at 110% -12%,#eaf2ff 0,transparent 80%),linear-gradient(150deg,#fbfdff,#f4f8ff);padding:36px 38px}
+.auth-inner{position:relative;width:min(100%,520px);background:white;border-radius:12px;padding:48px 49px 43px;box-shadow:0 18px 58px rgba(31,78,143,.11)}
+.auth-inner .eyebrow{font-size:12px;letter-spacing:.14em;margin-bottom:12px;color:#1975f4}
+.auth-inner h2{font-size:35px;line-height:1.12;letter-spacing:-.055em;color:#091b3b;margin-bottom:8px}
+.auth-inner .subtext{font-size:15px;line-height:1.42;color:#7187a9;margin-bottom:24px}
+.auth-tabs{padding:0;gap:0;border-radius:9px;background:#eaf1fb;margin-bottom:25px;overflow:hidden}
+.auth-tabs button{border-radius:9px;padding:15px 12px;font-size:15px;color:#6b83a5}
+.auth-tabs button.active{color:#1374f8;box-shadow:0 3px 9px rgba(18,73,150,.14);border-bottom:3px solid #1374f8;padding-bottom:12px}
+.auth-inner .field{margin-bottom:17px;gap:7px}
+.auth-inner .field label{font-size:13px;color:#3e5a82}
+.auth-inner .field input{border-radius:7px;min-height:47px;border-color:#cbdcf3;color:#0e2549;font-size:14px}
+.auth-inner .field input:focus{border-color:#2b7fff;box-shadow:0 0 0 3px #e6f1ff}
+.input-icon-wrap{position:relative}
+.input-icon-wrap>svg{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:20px;height:20px;color:#6e88b0;pointer-events:none}
+.auth-inner .field .input-icon-wrap input{padding-left:48px;padding-right:48px}
+.password-toggle{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:37px;height:37px;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:#6e88b0}
+.password-toggle:hover,.password-toggle:focus-visible{background:#edf4ff;color:#1775f4;outline:none}
+.password-toggle svg{width:20px;height:20px}
+.password-toggle.visible:after{content:'';position:absolute;width:25px;height:2px;background:currentColor;transform:rotate(-40deg)}
+.auth-submit{margin-top:5px;min-height:51px;border-radius:8px;background:#1475f5;border-color:#1475f5;font-size:15px;box-shadow:0 9px 18px rgba(28,108,222,.15)}
+.auth-submit:hover{background:#0867e7;border-color:#0867e7}
+.auth-note{font-size:12px;color:#8194b0;margin-top:18px}
+.supplier-mode-toggle{padding:0 0 13px;text-align:left;font-size:12px}
+.requested-tag{color:#2b7fff!important;font-weight:700}
+.users-card,.my-bookings{margin-top:22px}
+.user-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.user-item>div:first-child{min-width:0;overflow-wrap:anywhere}
+.my-bookings{max-width:880px}
+@media(max-width:1000px){.auth-intro{padding:35px}.auth-hero-copy{margin-top:65px}.auth-intro h1{font-size:48px}.auth-card{padding:25px}.auth-inner{padding:37px 30px}}
+@media(max-width:720px){.auth-screen{display:block}.auth-intro{min-height:280px;padding:28px 24px;background-position:center 58%}.auth-intro .hero-logo{display:block;width:138px;height:44px;padding:7px 11px}.auth-hero-copy{margin-top:30px}.auth-hero-copy .eyebrow{font-size:10px;margin-bottom:23px}.auth-hero-copy .eyebrow:after{bottom:-9px}.auth-intro h1{font-size:38px;line-height:1.03;margin-bottom:9px}.intro-copy{font-size:12px;max-width:360px}.intro-bottom,.auth-mobile-brand{display:none}.auth-card{padding:20px 16px 32px}.auth-inner{width:100%;padding:28px 22px;box-shadow:0 10px 35px rgba(31,78,143,.1)}.auth-inner h2{font-size:29px}.user-item{align-items:flex-start}.user-actions{flex-direction:column;align-items:flex-end;gap:6px}}
+@media print{.auth-intro,.auth-card{display:none!important}}

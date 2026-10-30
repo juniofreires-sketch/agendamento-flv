@@ -8,7 +8,7 @@ const api = async (url, method='GET', body) => {
   if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a operação.');
   return data;
 };
-const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',dashFrom:'',dashTo:'',dashSupplier:'',bookFrom:'',bookTo:'',bookSupplier:'',slotDay:'',bookings:[],pending:[],historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[]};
+const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',bookFrom:'',bookTo:'',bookSupplier:'',slotDay:'',bookings:[],pending:[],historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[]};
 const dateBR = day => day ? day.split('-').reverse().join('/') : '—';
 const shortDate = day => new Intl.DateTimeFormat('pt-BR',{weekday:'long',day:'2-digit',month:'long'}).format(new Date(day+'T12:00:00Z'));
 const formatNum = n => new Intl.NumberFormat('pt-BR').format(n || 0);
@@ -48,17 +48,25 @@ function openSupplierCombo(combo){
   search.focus();
 }
 
+const eyeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+const lockIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>';
+const mailIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg>';
+function passwordField(id,name,autocomplete){
+  return '<div class="field"><label for="'+id+'">Senha</label><div class="input-icon-wrap">'+lockIcon+'<input id="'+id+'" name="'+name+'" type="password" minlength="6" required autocomplete="'+autocomplete+'" placeholder="Digite sua senha"><button class="password-toggle" type="button" data-password-toggle="'+id+'" aria-label="Mostrar senha" aria-pressed="false">'+eyeIcon+'</button></div>'+(autocomplete==='new-password'?'<small>Mínimo de 6 caracteres.</small>':'')+'</div>';
+}
 function showAuth(mode='login'){
   state.authMode=mode;
   $('#appShell').classList.add('hidden');$('#authScreen').classList.remove('hidden');
-  const boot=state.meta.bootstrap;
   let form='';
-  if(boot){
-    form='<p class="eyebrow">CONFIGURAÇÃO INICIAL</p><h2>Crie o acesso administrador</h2><p class="subtext">Este primeiro acesso controla aprovações e o cadastro de fornecedores no teste local.</p><form id="bootstrapForm"><div class="field"><label for="bootName">Seu nome</label><input id="bootName" name="name" required autocomplete="name"></div><div class="field"><label for="bootEmail">Email</label><input id="bootEmail" name="email" type="email" required autocomplete="email"></div><div class="field"><label for="bootPassword">Senha</label><input id="bootPassword" name="password" type="password" minlength="10" required autocomplete="new-password"><small>Mínimo de 10 caracteres.</small></div><button class="btn btn-primary btn-full" type="submit">Criar administrador</button></form>';
+  if(state.meta.bootstrap){
+    form='<p class="eyebrow">CONFIGURAÇÃO INICIAL</p><h2>Crie o acesso administrador</h2><p class="subtext">Este primeiro acesso controla aprovações e o cadastro de fornecedores no teste local.</p><form id="bootstrapForm"><div class="field"><label for="bootName">Seu nome</label><input id="bootName" name="name" required autocomplete="name"></div><div class="field"><label for="bootEmail">Email</label><input id="bootEmail" name="email" type="email" required autocomplete="email"></div>'+passwordField('bootPassword','password','new-password')+'<button class="btn btn-primary btn-full" type="submit">Criar administrador</button></form>';
   } else {
-    form='<p class="eyebrow">BEM-VINDO AO PORTAL</p><h2>'+(mode==='login'?'Acesse sua conta':'Crie sua conta')+'</h2><p class="subtext">'+(mode==='login'?'Entre para acompanhar seus agendamentos e emitir a senha de entrega.':'Escolha sua empresa na lista. O acesso será liberado após aprovação.')+'</p><div class="auth-tabs"><button type="button" data-auth="login" class="'+(mode==='login'?'active':'')+'">Entrar</button><button type="button" data-auth="register" class="'+(mode==='register'?'active':'')+'">Cadastrar</button></div>';
-    if(mode==='login')form+='<form id="loginForm"><div class="field"><label for="loginEmail">Email</label><input id="loginEmail" name="email" type="email" placeholder="seu@email.com" required autocomplete="email"></div><div class="field"><label for="loginPassword">Senha</label><input id="loginPassword" name="password" type="password" placeholder="Sua senha" required autocomplete="current-password"></div><button class="btn btn-primary btn-full" type="submit">Entrar no portal →</button></form><p class="auth-note">Seu acesso mostra apenas os dados do seu fornecedor.</p>';
-    else form+='<form id="registerForm"><div class="field"><label for="regName">Seu nome</label><input id="regName" name="name" required autocomplete="name"></div><div class="field"><label for="regEmail">Email de acesso</label><input id="regEmail" name="email" type="email" required autocomplete="email"></div>'+supplierCombo('regSupplier')+'<div class="field"><label for="regPassword">Senha</label><input id="regPassword" name="password" type="password" minlength="10" required autocomplete="new-password"><small>Mínimo de 10 caracteres.</small></div><button class="btn btn-primary btn-full" type="submit">Solicitar cadastro →</button></form><p class="auth-note">A equipe avaliará o cadastro e liberará o acesso após aprovação do administrador.</p>';
+    form='<p class="eyebrow">BEM-VINDO AO PORTAL</p><h2>'+(mode==='login'?'Acesse sua conta':'Crie sua conta')+'</h2><p class="subtext">'+(mode==='login'?'Entre para acompanhar seus agendamentos e emitir a senha de entrega.':'Escolha sua empresa ou digite o nome dela. O acesso será liberado após aprovação.')+'</p><div class="auth-tabs"><button type="button" data-auth="login" class="'+(mode==='login'?'active':'')+'">Entrar</button><button type="button" data-auth="register" class="'+(mode==='register'?'active':'')+'">Cadastrar</button></div>';
+    if(mode==='login'){
+      form+='<form id="loginForm"><div class="field"><label for="loginEmail">Email</label><div class="input-icon-wrap">'+mailIcon+'<input id="loginEmail" name="email" type="email" placeholder="seu@email.com" required autocomplete="email"></div></div>'+passwordField('loginPassword','password','current-password')+'<button class="btn btn-primary btn-full auth-submit" type="submit">Entrar no portal <span aria-hidden="true">→</span></button></form><p class="auth-note">Seu acesso mostra apenas os dados do seu fornecedor.</p>';
+    } else {
+      form+='<form id="registerForm"><div class="field"><label for="regName">Seu nome</label><input id="regName" name="name" required autocomplete="name"></div><div class="field"><label for="regEmail">Email de acesso</label><input id="regEmail" name="email" type="email" required autocomplete="email"></div><div id="regSupplierSelect">'+supplierCombo('regSupplier')+'</div><button type="button" class="text-link supplier-mode-toggle" id="toggleNewSupplier">Não encontrou sua empresa? Digitar nome</button><div id="regSupplierTyped" class="field hidden"><label for="regSupplierName">Nome do fornecedor *</label><input id="regSupplierName" name="supplier_name" minlength="3" maxlength="160" placeholder="Digite a razão social" autocomplete="organization"><small>O administrador conferirá esta empresa antes de liberar o acesso.</small></div>'+passwordField('regPassword','password','new-password')+'<button class="btn btn-primary btn-full auth-submit" type="submit">Solicitar cadastro <span aria-hidden="true">→</span></button></form><p class="auth-note">A equipe avaliará o cadastro e liberará o acesso após aprovação.</p>';
+    }
   }
   $('#authContent').innerHTML='<div class="auth-inner">'+form+'</div>';
 }
@@ -72,19 +80,24 @@ function showApp(){
   $('#userAvatar').textContent=(state.user.name||'F').slice(0,1).toUpperCase();
   $('#todayLabel').textContent=dateBR(today());
   document.querySelectorAll('.admin-only').forEach(el=>el.classList.toggle('hidden',state.user.role!=='admin'));
+  document.querySelectorAll('.nav-link[data-view]').forEach(el=>{
+    el.classList.toggle('hidden',state.user.role!=='admin' && el.dataset.view!=='schedule');
+  });
   if(!state.dashFrom){state.dashFrom=firstOfMonth(today());state.dashTo=lastOfMonth(today());state.bookFrom=dateOffset(today(),-90);state.bookTo=dateOffset(today(),90);state.historyFrom=dateOffset(today(),-365);state.historyTo=today();state.slotDay=nextOpenDay(state.meta.current_time > '10:00' ? dateOffset(today(),1) : today())}
+  if(state.user.role!=='admin')state.view='schedule';
   navigate(state.view);
 }
 function navigate(view){
-  if(view==='admin'&&state.user.role!=='admin')view='dashboard';
+  if(state.user.role!=='admin'&&view!=='schedule')view='schedule';
   state.view=view;
-  const titles={dashboard:'Dashboard',schedule:'Novo agendamento',bookings:'Agendamentos',admin:'Administração'};
+  const titles={dashboard:'Dashboard',schedule:'Novo agendamento',bookings:'Agendamentos',users:'Usuários',admin:'Administração'};
   $('#pageTitle').textContent=titles[view];$('#crumb').textContent=titles[view].toUpperCase();
   document.querySelectorAll('.nav-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
   $('#sidebar').classList.remove('open');$('#mobileOverlay').classList.remove('show');
   if(view==='dashboard')renderDashboard();
   if(view==='schedule')renderSchedule();
   if(view==='bookings')renderBookings();
+  if(view==='users')renderUsers();
   if(view==='admin')renderAdmin();
 }
 const pageHead=(kicker,title,description,action='')=>'<div class="page-head"><div><p class="eyebrow">'+kicker+'</p><h1>'+title+'</h1><p>'+description+'</p></div><div class="page-actions">'+action+'</div></div>';
@@ -131,7 +144,19 @@ function renderSchedule(){
   '<div class="field-row"><div class="field"><label for="weight">Peso da carga (kg) *</label><input id="weight" name="weight_kg" type="number" min="0.01" step="0.01" placeholder="Ex: 1250" required></div><div class="field"><label for="items">Quantidade de itens *</label><input id="items" name="item_count" type="number" min="0" step="1" placeholder="Ex: 80" required></div></div>'+
   '<div class="field-row"><div class="field"><label for="boxes">Quantidade de caixas *</label><input id="boxes" name="box_count" type="number" min="0" step="1" placeholder="Ex: 200" required></div><div class="field"><label for="vehicle">Tipo de veículo *</label><select id="vehicle" name="vehicle_type" required>'+optionList(state.meta.vehicleTypes)+'</select></div></div>'+
   '<div class="field"><label for="cargo">Tipo de carga *</label><select id="cargo" name="cargo_type" required>'+optionList(state.meta.cargoTypes)+'</select></div>'+
-  '<div class="form-footer"><p>Após confirmar, a senha estará disponível para impressão e apresentação na portaria.</p><button type="submit" class="btn btn-primary">Confirmar agendamento →</button></div></form></div></div>';
+  '<div class="form-footer"><p>Após confirmar, a senha estará disponível para impressão e apresentação na portaria.</p><button type="submit" class="btn btn-primary">Confirmar agendamento →</button></div></form></div></div>'+
+  (state.user.role==='supplier'?'<div class="card section-card my-bookings"><div class="section-head"><div><h3>Meus agendamentos</h3><p>Consulte suas senhas e cancele uma entrega quando precisar.</p></div></div><div class="tabs"><button type="button" data-supplier-booktab="active">Confirmados</button><button type="button" data-supplier-booktab="cancelled">Cancelados</button></div><div id="supplierBookBody" class="empty-state">Carregando seus agendamentos...</div></div>':'');
+  if(state.user.role==='supplier')refreshSupplierBookings();
+}
+async function refreshSupplierBookings(){
+  try{
+    state.supplierBookings=(await api('/api/bookings')).bookings;
+    showSupplierBookings();
+  }catch(e){$('#supplierBookBody').textContent=e.message;toast(e.message,true)}
+}
+function showSupplierBookings(){
+  document.querySelectorAll('[data-supplier-booktab]').forEach(b=>b.classList.toggle('active',b.dataset.supplierBooktab===state.supplierBookTab));
+  $('#supplierBookBody').innerHTML=bookingTable(state.supplierBookings.filter(b=>b.status===state.supplierBookTab));
 }
 async function renderBookings(){
   $('#viewContent').innerHTML=pageHead('CONSULTA','Agendamentos','Consulte entregas confirmadas, cancelamentos e histórico.','<button class="btn btn-primary" data-view="schedule" type="button">＋ Novo agendamento</button>')+
@@ -169,16 +194,31 @@ function openHistoryModal(){
   $('#historyFrom').focus();
 }
 function closeHistoryModal(){$('#historyModal').classList.add('hidden')}
-async function renderAdmin(){
-  $('#viewContent').innerHTML=pageHead('GESTÃO','Administração','Aprove novos acessos e mantenha o cadastro de fornecedores atualizado.')+'<div class="admin-grid"><div class="card pending-card"><div class="section-head"><div><h3>Cadastros aguardando aprovação</h3><p>Confira o vínculo antes de liberar o acesso.</p></div></div><div id="pendingBody" class="empty-state">Carregando...</div></div><div class="card supplier-card"><div class="section-head"><div><h3>Novo fornecedor</h3><p>Apenas administradores podem adicionar empresas.</p></div></div><form id="supplierForm"><div class="field"><label for="newSupplier">Razão social</label><input id="newSupplier" name="name" minlength="3" maxlength="160" required placeholder="Nome completo do fornecedor"></div><button type="submit" class="btn btn-primary btn-full">Cadastrar fornecedor</button></form><div class="info-panel" style="margin-top:22px"><h3>Base cadastrada</h3><p><strong>'+state.meta.suppliers.length+' fornecedores</strong> disponíveis para seleção.</p></div></div></div>';
-  await refreshPending();
+async function renderUsers(){
+  $('#viewContent').innerHTML=pageHead('GESTÃO DE ACESSOS','Usuários','Avalie solicitações e gerencie as contas dos fornecedores.')+
+  '<div class="card section-card"><div class="section-head"><div><h3>Aguardando aprovação</h3><p>Confira o vínculo do solicitante antes de liberar o acesso.</p></div></div><div id="pendingBody" class="empty-state">Carregando...</div></div>'+
+  '<div class="card section-card users-card"><div class="section-head"><div><h3>Todos os usuários fornecedores</h3><p>Contas ativas e pendentes. A exclusão mantém o histórico das entregas.</p></div></div><div id="adminUsersBody" class="empty-state">Carregando...</div></div>';
+  await Promise.all([refreshPending(),refreshAdminUsers()]);
 }
 async function refreshPending(){
   try{
     const rows=(await api('/api/admin/pending')).users;
-    $('#pendingBody').className='';
-    $('#pendingBody').innerHTML=rows.length?rows.map(u=>'<div class="pending-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name)+'</small></div><button class="btn btn-primary" data-approve="'+esc(u.id)+'">Aprovar</button></div>').join(''):'<div class="empty-state"><span class="empty-icon">✓</span><strong>Nenhuma aprovação pendente</strong><span>Novos cadastros aparecerão aqui.</span></div>';
-  }catch(e){$('#pendingBody').textContent=e.message;toast(e.message,true)}
+    const target=$('#pendingBody');if(!target)return;
+    target.className='';
+    target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name)+'</small>'+(u.requested_supplier_name?'<small class="requested-tag">Fornecedor digitado no cadastro</small>':'')+'</div><button class="btn btn-primary" data-approve="'+esc(u.id)+'">Aprovar</button></div>').join(''):'<div class="empty-state"><span class="empty-icon">✓</span><strong>Nenhuma aprovação pendente</strong><span>Novos cadastros aparecerão aqui.</span></div>';
+  }catch(e){const target=$('#pendingBody');if(target)target.textContent=e.message;toast(e.message,true)}
+}
+async function refreshAdminUsers(){
+  try{
+    const rows=(await api('/api/admin/users')).users;
+    const target=$('#adminUsersBody');if(!target)return;
+    target.className='';
+    target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item user-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name)+'</small></div><div class="user-actions"><span class="badge '+(u.status==='active'?'active':'cancelled')+'">'+(u.status==='active'?'Ativo':'Pendente')+'</span><button class="btn btn-danger" type="button" data-delete-user="'+esc(u.id)+'">Excluir</button></div></div>').join(''):'<div class="empty-state"><strong>Nenhum fornecedor cadastrado</strong></div>';
+  }catch(e){const target=$('#adminUsersBody');if(target)target.textContent=e.message;toast(e.message,true)}
+}
+function renderAdmin(){
+  $('#viewContent').innerHTML=pageHead('ADMINISTRAÇÃO','Fornecedores','Mantenha o cadastro de empresas atualizado.')+
+  '<div class="card supplier-card admin-supplier-card"><div class="section-head"><div><h3>Novo fornecedor</h3><p>Somente administradores podem cadastrar empresas diretamente.</p></div></div><form id="supplierForm"><div class="field"><label for="newSupplier">Razão social</label><input id="newSupplier" name="name" minlength="3" maxlength="160" required placeholder="Nome completo do fornecedor"></div><button type="submit" class="btn btn-primary">Cadastrar fornecedor</button></form><div class="info-panel" style="margin-top:22px"><h3>Base cadastrada</h3><p><strong>'+state.meta.suppliers.length+' fornecedores</strong> disponíveis para seleção.</p></div></div>';
 }
 function openTicket(b){
   $('#ticketContent').innerHTML='<div class="ticket"><div class="ticket-header"><small>SENHA PARA ENTREGA DE MERCADORIA</small><div class="ticket-number">'+String(b.id).padStart(3,'0')+'</div></div><p class="ticket-protocol">Apresente esta senha no check-in · Protocolo AGE-'+b.id+'</p>'+
@@ -188,6 +228,41 @@ function openTicket(b){
   $('#ticketModal').classList.remove('hidden');
 }
 document.addEventListener('click',async e=>{
+  const passwordToggle=e.target.closest('[data-password-toggle]');
+  if(passwordToggle){
+    const input=document.getElementById(passwordToggle.dataset.passwordToggle);
+    const visible=input.type==='password';
+    input.type=visible?'text':'password';
+    passwordToggle.setAttribute('aria-pressed',String(visible));
+    passwordToggle.setAttribute('aria-label',visible?'Ocultar senha':'Mostrar senha');
+    passwordToggle.classList.toggle('visible',visible);
+    return;
+  }
+  if(e.target.id==='toggleNewSupplier'){
+    const typed=$('#regSupplierTyped');
+    const selected=$('#regSupplierSelect');
+    const useTyped=typed.classList.contains('hidden');
+    typed.classList.toggle('hidden',!useTyped);
+    selected.classList.toggle('hidden',useTyped);
+    $('#regSupplierName').required=useTyped;
+    $('#regSupplierName').value='';
+    $('#regSupplierValue').value='';
+    $('#regSupplierSelect [data-combo-label]').textContent='Selecione um fornecedor';
+    e.target.textContent=useTyped?'Escolher fornecedor da lista':'Não encontrou sua empresa? Digitar nome';
+    return;
+  }
+  const supplierBookTab=e.target.closest('[data-supplier-booktab]');
+  if(supplierBookTab){state.supplierBookTab=supplierBookTab.dataset.supplierBooktab;showSupplierBookings();return}
+  const deleteUser=e.target.closest('[data-delete-user]');
+  if(deleteUser){
+    if(!confirm('Excluir esta conta de fornecedor? O histórico de agendamentos será mantido.'))return;
+    try{
+      await api('/api/admin/users/'+deleteUser.dataset.deleteUser+'/delete','POST',{});
+      toast('Usuário excluído.');
+      await Promise.all([refreshPending(),refreshAdminUsers()]);
+    }catch(err){toast(err.message,true)}
+    return;
+  }
   const choice=e.target.closest('[data-combo-option]');
   if(choice){
     const combo=choice.closest('[data-supplier-combo]');
@@ -216,9 +291,9 @@ document.addEventListener('click',async e=>{
   const ticket=e.target.closest('[data-ticket]');
   if(ticket){try{openTicket((await api('/api/bookings/'+ticket.dataset.ticket)).booking)}catch(err){toast(err.message,true)}return}
   const cancel=e.target.closest('[data-cancel]');
-  if(cancel){if(!confirm('Cancelar este agendamento? A vaga será liberada.'))return;try{await api('/api/bookings/'+cancel.dataset.cancel+'/cancel','POST',{});toast('Agendamento cancelado.');await renderBookings()}catch(err){toast(err.message,true)}return}
+  if(cancel){if(!confirm('Cancelar este agendamento? A vaga será liberada.'))return;try{await api('/api/bookings/'+cancel.dataset.cancel+'/cancel','POST',{});toast('Agendamento cancelado.');if(state.user.role==='supplier')renderSchedule();else await renderBookings()}catch(err){toast(err.message,true)}return}
   const approve=e.target.closest('[data-approve]');
-  if(approve){try{await api('/api/admin/users/'+approve.dataset.approve+'/approve','POST',{});toast('Acesso aprovado.');await refreshPending()}catch(err){toast(err.message,true)}return}
+  if(approve){try{await api('/api/admin/users/'+approve.dataset.approve+'/approve','POST',{});toast('Acesso aprovado.');await Promise.all([refreshPending(),refreshAdminUsers()]);state.meta=await api('/api/meta')}catch(err){toast(err.message,true)}return}
   if(e.target.id==='applyDash'){
     state.dashFrom=$('#dashFrom').value;state.dashTo=$('#dashTo').value;state.dashSupplier=$('#dashSupplier')?.value||'';
     return renderDashboard();
@@ -263,7 +338,7 @@ document.addEventListener('submit',async e=>{
       state.user=r.user;state.meta.bootstrap=false;toast('Administrador criado.');showApp();
     }
     if(form.id==='registerForm'){
-      if(!values.supplier_id)throw new Error('Selecione um fornecedor.');
+      if(!values.supplier_id && !values.supplier_name?.trim())throw new Error('Selecione ou digite um fornecedor.');
       const r=await api('/api/register','POST',values);
       showRegistrationReceived(r.message);
     }
