@@ -102,9 +102,12 @@ declare
   selected_supplier bigint;
   display_name text := trim(coalesce(new.raw_user_meta_data ->> 'name', ''));
 begin
-  -- Primeiro administrador, limitado ao email indicado pelo proprietario do portal.
-  -- A autenticacao so libera a sessao depois da confirmacao do email pelo Supabase.
+  -- A conta administrativa so pode ser criada pela API administrativa do Supabase.
+  -- app_metadata nao pode ser alterado por um cadastro publico.
   if lower(new.email) = 'junior.matheus64@gmail.com' then
+    if coalesce(new.raw_app_meta_data ->> 'flv_admin_bootstrap', '') <> 'true' then
+      raise exception 'O cadastro administrativo e feito pela equipe do portal.';
+    end if;
     if char_length(display_name) < 2 or char_length(display_name) > 120 then
       raise exception 'Informe seu nome com 2 a 120 caracteres.';
     end if;

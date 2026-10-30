@@ -58,21 +58,14 @@ function showAuth(mode='login'){
   } else {
     form='<p class="eyebrow">BEM-VINDO AO PORTAL</p><h2>'+(mode==='login'?'Acesse sua conta':'Crie sua conta')+'</h2><p class="subtext">'+(mode==='login'?'Entre para acompanhar seus agendamentos e emitir a senha de entrega.':'Escolha sua empresa na lista. O acesso será liberado após aprovação.')+'</p><div class="auth-tabs"><button type="button" data-auth="login" class="'+(mode==='login'?'active':'')+'">Entrar</button><button type="button" data-auth="register" class="'+(mode==='register'?'active':'')+'">Cadastrar</button></div>';
     if(mode==='login')form+='<form id="loginForm"><div class="field"><label for="loginEmail">Email</label><input id="loginEmail" name="email" type="email" placeholder="seu@email.com" required autocomplete="email"></div><div class="field"><label for="loginPassword">Senha</label><input id="loginPassword" name="password" type="password" placeholder="Sua senha" required autocomplete="current-password"></div><button class="btn btn-primary btn-full" type="submit">Entrar no portal →</button></form><p class="auth-note">Seu acesso mostra apenas os dados do seu fornecedor.</p>';
-    else form+='<form id="registerForm"><div class="field"><label for="regName">Seu nome</label><input id="regName" name="name" required autocomplete="name"></div><div class="field"><label for="regEmail">Email de acesso</label><input id="regEmail" name="email" type="email" required autocomplete="email"></div><div id="regSupplierField">'+supplierCombo('regSupplier')+'</div><div id="registerAdminNote" class="info-panel hidden" style="margin-bottom:17px"><strong>Acesso administrativo</strong><p>O email autorizado será ativado após a confirmação da caixa de entrada.</p></div><div class="field"><label for="regPassword">Senha</label><input id="regPassword" name="password" type="password" minlength="10" required autocomplete="new-password"><small>Mínimo de 10 caracteres.</small></div><button class="btn btn-primary btn-full" type="submit">Solicitar cadastro →</button></form><p class="auth-note">O administrador confirmará o vínculo com o fornecedor antes de liberar a conta.</p>';
+    else form+='<form id="registerForm"><div class="field"><label for="regName">Seu nome</label><input id="regName" name="name" required autocomplete="name"></div><div class="field"><label for="regEmail">Email de acesso</label><input id="regEmail" name="email" type="email" required autocomplete="email"></div>'+supplierCombo('regSupplier')+'<div class="field"><label for="regPassword">Senha</label><input id="regPassword" name="password" type="password" minlength="10" required autocomplete="new-password"><small>Mínimo de 10 caracteres.</small></div><button class="btn btn-primary btn-full" type="submit">Solicitar cadastro →</button></form><p class="auth-note">A equipe avaliará o cadastro e liberará o acesso após aprovação do administrador.</p>';
   }
   $('#authContent').innerHTML='<div class="auth-inner">'+form+'</div>';
-  const adminEmail='junior.matheus64@gmail.com';
-  const registerEmail=$('#regEmail');
-  if(registerEmail){
-    const updateRegistrationMode=()=>{
-      const isBootstrapAdmin=registerEmail.value.trim().toLowerCase()===adminEmail;
-      $('#regSupplierField')?.classList.toggle('hidden',isBootstrapAdmin);
-      $('#registerAdminNote')?.classList.toggle('hidden',!isBootstrapAdmin);
-      if(isBootstrapAdmin)$('#regSupplierValue').value='';
-    };
-    registerEmail.addEventListener('input',updateRegistrationMode);
-    updateRegistrationMode();
-  }
+}
+function showRegistrationReceived(message){
+  state.authMode='login';
+  $('#appShell').classList.add('hidden');$('#authScreen').classList.remove('hidden');
+  $('#authContent').innerHTML='<div class="auth-inner"><div class="registration-icon" aria-hidden="true">✓</div><p class="eyebrow">CADASTRO RECEBIDO</p><h2>Solicitação em análise</h2><p class="subtext">'+esc(message)+'</p><div class="info-panel registration-panel"><strong>Próximo passo</strong><p>A equipe verificará seu vínculo com o fornecedor. Você poderá entrar somente depois que um administrador aprovar o cadastro.</p></div><button class="btn btn-primary btn-full" type="button" data-auth="login">Voltar para entrar</button></div>';
 }
 function showApp(){
   $('#authScreen').classList.add('hidden');$('#appShell').classList.remove('hidden');
@@ -270,9 +263,9 @@ document.addEventListener('submit',async e=>{
       state.user=r.user;state.meta.bootstrap=false;toast('Administrador criado.');showApp();
     }
     if(form.id==='registerForm'){
-      if(values.email.trim().toLowerCase()!=='junior.matheus64@gmail.com'&&!values.supplier_id)throw new Error('Selecione um fornecedor.');
+      if(!values.supplier_id)throw new Error('Selecione um fornecedor.');
       const r=await api('/api/register','POST',values);
-      toast(r.message);showAuth('login');
+      showRegistrationReceived(r.message);
     }
     if(form.id==='loginForm'){
       const r=await api('/api/login','POST',values);

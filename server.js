@@ -138,7 +138,7 @@ const server = http.createServer(async (req,res) => {
       try {
         db.prepare("INSERT INTO users(id,name,email,password_hash,role,status,supplier_id) VALUES (?,?,?,?, 'supplier','pending',?)").run(randomBytes(16).toString('hex'),name,email,hashPassword(password),supplier.id);
       } catch { return fail(res,409,'Este email já está cadastrado.'); }
-      return json(res,201,{message:'Cadastro enviado. Aguarde a aprovação do administrador para acessar o portal.'});
+      return json(res,201,{message:'Cadastro recebido! Nossa equipe avaliará seus dados. Após a aprovação do administrador, você poderá acessar o portal.'});
     }
     if (req.method === 'POST' && p === '/api/login') {
       const b = await readBody(req);

@@ -30,9 +30,9 @@ Configure `SUPABASE_URL` e `SUPABASE_PUBLISHABLE_KEY` e execute:
 pnpm build
 ```
 
-O build cria `dist/`, publicado segundo `vercel.json`. Antes de publicar, crie um projeto Supabase novo, aplique `supabase/schema.sql` e `supabase/seed.sql`, habilite confirmação de email e ajuste as URLs de autenticação. Configure na hospedagem as mesmas duas variáveis de build. Nunca coloque uma chave `service_role` no navegador.
+O build cria `dist/`, publicado segundo `vercel.json`. Antes de publicar em outro ambiente, crie um projeto Supabase novo, aplique `supabase/schema.sql` e `supabase/seed.sql` e ajuste as URLs de autenticação. Configure na hospedagem as mesmas duas variáveis de build. Nunca coloque uma chave `service_role` no navegador.
 
-O esquema cria o primeiro perfil administrativo ativo para o email autorizado nele, depois que esse endereço confirma o cadastro. Contas de fornecedores ficam pendentes até aprovação administrativa.
+O administrador inicial foi criado por um processo administrativo controlado para `junior.matheus64@gmail.com`. O cadastro público sempre exige um fornecedor e cria uma conta pendente. Somente o administrador pode aprová-la; até então, o fornecedor não acessa o portal.
 
 ## Ambiente de estudo publicado
 
@@ -42,7 +42,7 @@ O esquema cria o primeiro perfil administrativo ativo para o email autorizado ne
 - Repositório: https://github.com/juniofreires-sketch/agendamento-flv (`main`).
 - `supabase/config.toml` define a URL de retorno da autenticação. Os arquivos locais de credenciais e o banco SQLite ficam fora do Git.
 
-O serviço de email padrão do Supabase só entrega confirmações a endereços da equipe do projeto. Para permitir que fornecedores externos criem contas com confirmação de email, configure um serviço SMTP próprio no Supabase; sem isso, o cadastro externo não ficará operacional.
+Neste ambiente de estudo, a confirmação de email do Supabase está desativada para permitir o cadastro de fornecedores externos sem serviço SMTP. A aprovação manual deve incluir a conferência do vínculo do solicitante com o fornecedor. Para uso real, configure SMTP e reative a confirmação de email.
 
 ## Planos gratuitos
 

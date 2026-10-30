@@ -63,14 +63,16 @@ export async function api(path,method='GET',body){
   }
   if(p==='/api/register'&&method==='POST'){
     const email=String(body.email||'').trim().toLowerCase();
-    if(email!=='junior.matheus64@gmail.com'&&!body?.supplier_id)throw new Error('Selecione um fornecedor.');
-    const {error}=await supabase.auth.signUp({
+    if(email==='junior.matheus64@gmail.com')throw new Error('Este email já está reservado para a administração.');
+    if(!body?.supplier_id)throw new Error('Selecione um fornecedor.');
+    const {data,error}=await supabase.auth.signUp({
       email,
       password:String(body.password||''),
-      options:{data:{name:String(body.name||'').trim(),supplier_id:body.supplier_id?Number(body.supplier_id):null}}
+      options:{data:{name:String(body.name||'').trim(),supplier_id:Number(body.supplier_id)}}
     });
     fail(error);
-    return {message:'Cadastro enviado. Confirme o email recebido e aguarde a aprovação do administrador.'};
+    if(data.session)await supabase.auth.signOut();
+    return {message:'Cadastro recebido! Nossa equipe avaliará seus dados. Após a aprovação do administrador, você poderá acessar o portal.'};
   }
   if(p==='/api/login'&&method==='POST'){
     const {data,error}=await supabase.auth.signInWithPassword({

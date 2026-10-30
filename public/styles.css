@@ -111,3 +111,6 @@ h1,h2,h3,.stat-value,.side-brand strong,.ticket-number{font-family:Inter,Arial,s
 .ticket-window{background:#f3f6fb;box-shadow:0 25px 75px rgba(8,22,45,.42)}
 .icon-button{color:#49698e}
 .icon-button:hover{background:#e9f1fb}
+.registration-icon{display:grid;place-items:center;width:54px;height:54px;border-radius:16px;background:#e6f7ec;color:#236a49;font-size:30px;font-weight:800;margin-bottom:24px}
+.registration-panel{margin:0 0 24px}
+.registration-panel strong{display:block;margin-bottom:7px;color:#123f72}
