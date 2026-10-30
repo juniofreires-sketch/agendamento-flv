@@ -39,7 +39,10 @@ O esquema cria o primeiro perfil administrativo ativo para o email autorizado ne
 - Portal: https://agendamento-flv-nu.vercel.app
 - Supabase: projeto `Agendamento FLV` (`vtnpnosxahubqfsinlko`) na organização `juniofreires-sketch's Org`, região `sa-east-1`.
 - Vercel: projeto `agendamento-flv` na equipe Hobby `Indicadores CD`.
+- Repositório: https://github.com/juniofreires-sketch/agendamento-flv (`main`).
 - `supabase/config.toml` define a URL de retorno da autenticação. Os arquivos locais de credenciais e o banco SQLite ficam fora do Git.
+
+O serviço de email padrão do Supabase só entrega confirmações a endereços da equipe do projeto. Para permitir que fornecedores externos criem contas com confirmação de email, configure um serviço SMTP próprio no Supabase; sem isso, o cadastro externo não ficará operacional.
 
 ## Planos gratuitos
 
