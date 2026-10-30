@@ -52,14 +52,16 @@ export async function api(path,method='GET',body){
   const url=new URL(path,location.origin);
   const p=url.pathname;
   if(p==='/api/meta'&&method==='GET'){
-    const [{data,error},settings]=await Promise.all([
+    const [{data,error},{data:scheduling,error:schedulingError},settings]=await Promise.all([
       supabase.from('suppliers').select('id,name').order('name').limit(1000),
+      supabase.from('scheduling_settings').select('start_time,end_time,interval_minutes,vehicles_per_slot,daily_vehicle_limit').eq('id',1).single(),
       fetch(__SUPABASE_URL__+'/auth/v1/settings',{headers:{apikey:__SUPABASE_PUBLISHABLE_KEY__}})
         .then(response=>response.ok?response.json():null).catch(()=>null)
     ]);
     fail(error);
+    fail(schedulingError);
     const now=localParts();
-    return {suppliers:data||[],vehicleTypes,cargoTypes,bootstrap:false,googleEnabled:settings?.external?.google===true,today:now.day,current_time:now.time};
+    return {suppliers:data||[],vehicleTypes,cargoTypes,scheduling:{...scheduling,start_time:String(scheduling.start_time).slice(0,5),end_time:String(scheduling.end_time).slice(0,5)},bootstrap:false,googleEnabled:settings?.external?.google===true,today:now.day,current_time:now.time};
   }
   if(p==='/api/me'&&method==='GET'){
     const user=await signedInProfile();
@@ -102,10 +104,20 @@ export async function api(path,method='GET',body){
     }
     return {user};
   }
+  if(p==='/api/dashboard'&&method==='GET'){
+    const user=await signedInProfile();
+    if(!user||user.status!=='active'||!['admin','commercial'].includes(user.role))throw new Error('Sem permissão para acessar este painel.');
+    const from=url.searchParams.get('from')||'0001-01-01',to=url.searchParams.get('to')||'9999-12-31';
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)throw new Error('Período inválido.');
+    const {data,error}=await supabase.rpc('commercial_dashboard',{p_from:from,p_to:to});
+    fail(error);return data;
+  }
   if(p==='/api/logout'&&method==='POST'){
     const {error}=await supabase.auth.signOut();fail(error);return {ok:true};
   }
   if(p==='/api/bookings'&&method==='GET'){
+    const profile=await signedInProfile();
+    if(profile?.role==='commercial')throw new Error('O perfil comercial não tem acesso à lista de agendamentos.');
     const from=url.searchParams.get('from')||'0001-01-01';
     const to=url.searchParams.get('to')||'9999-12-31';
     let query=supabase.from('bookings').select(bookingSelect)
@@ -150,7 +162,7 @@ export async function api(path,method='GET',body){
   }
   if(p==='/api/admin/users'&&method==='GET'){
     const {data,error}=await supabase.from('profiles')
-      .select('id,name,email,role,status,created_at,requested_supplier_name,suppliers(name)')
+      .select('id,name,email,role,status,supplier_id,created_at,requested_supplier_name,suppliers(name)')
       .order('created_at',{ascending:false}).limit(2000);
     fail(error);
     return {users:(data||[]).map(row=>({...row,supplier_name:row.suppliers?.name||row.requested_supplier_name||''}))};
@@ -160,6 +172,26 @@ export async function api(path,method='GET',body){
     const {error}=await supabase.rpc('admin_approve_user',{p_user_id:approve[1],p_role:body?.role||'supplier'});
     fail(error);
     return {ok:true};
+  }
+  if(p==='/api/admin/settings'&&method==='POST'){
+    const {error}=await supabase.rpc('admin_update_scheduling_settings',{
+      p_start_time:body.start_time,
+      p_end_time:body.end_time,
+      p_interval_minutes:Number(body.interval_minutes),
+      p_vehicles_per_slot:Number(body.vehicles_per_slot),
+      p_daily_vehicle_limit:Number(body.daily_vehicle_limit)
+    });
+    fail(error);
+    const {data,error:readError}=await supabase.from('scheduling_settings').select('start_time,end_time,interval_minutes,vehicles_per_slot,daily_vehicle_limit').eq('id',1).single();
+    fail(readError);
+    return {scheduling:{...data,start_time:String(data.start_time).slice(0,5),end_time:String(data.end_time).slice(0,5)}};
+  }
+  const updateRole=/^\/api\/admin\/users\/([a-f0-9-]+)\/role$/.exec(p);
+  if(updateRole&&method==='POST'){
+    const {error}=await supabase.rpc('admin_update_user_role',{
+      p_user_id:updateRole[1],p_role:body?.role,p_supplier_id:body?.supplier_id?Number(body.supplier_id):null
+    });
+    fail(error);return {ok:true};
   }
   const remove=/^\/api\/admin\/users\/([a-f0-9-]+)\/delete$/.exec(p);
   if(remove&&method==='POST'){

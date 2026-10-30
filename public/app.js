@@ -8,7 +8,7 @@ const api = async (url, method='GET', body) => {
   if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a operação.');
   return data;
 };
-const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',bookFrom:'',bookTo:'',bookSupplier:'',slotDay:'',bookings:[],pending:[],historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[]};
+const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',bookFrom:'',bookTo:'',bookSupplier:'',slotDay:'',bookings:[],pending:[],adminUsers:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[]};
 const dateBR = day => day ? day.split('-').reverse().join('/') : '—';
 const shortDate = day => new Intl.DateTimeFormat('pt-BR',{weekday:'long',day:'2-digit',month:'long'}).format(new Date(day+'T12:00:00Z'));
 const formatNum = n => new Intl.NumberFormat('pt-BR').format(n || 0);
@@ -22,6 +22,9 @@ const toast = (message,error=false) => {const el=$('#toast');el.textContent=mess
 const submitButton = (form, busy) => {const button=form.querySelector('button[type="submit"]');if(button){button.disabled=busy;button.dataset.text ||= button.textContent;button.textContent=busy?'Aguarde...':button.dataset.text}};
 const supplierOptions = (selected='',includeAll=false) => (includeAll?'<option value="">Todos os fornecedores</option>':'<option value="">Selecione um fornecedor</option>')+state.meta.suppliers.map(s=>'<option value="'+s.id+'"'+(String(selected)===String(s.id)?' selected':'')+'>'+esc(s.name)+'</option>').join('');
 const optionList = arr => '<option value="">Selecione</option>'+arr.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');
+const roleNames = {admin:'Administrador',supplier:'Fornecedor',commercial:'Comercial'};
+const allowedViews = role => role==='admin'?['dashboard','schedule','bookings','users','admin']:role==='commercial'?['dashboard']:['schedule','bookings'];
+const defaultView = role => role==='admin'||role==='commercial'?'dashboard':'schedule';
 function supplierCombo(id){
   return '<div class="field"><label for="'+id+'Trigger">Fornecedor *</label><div class="supplier-combo" data-supplier-combo><input type="hidden" id="'+id+'Value" name="supplier_id"><button id="'+id+'Trigger" class="supplier-trigger" type="button" data-combo-trigger aria-haspopup="listbox" aria-expanded="false"><span data-combo-label>Selecione um fornecedor</span><span aria-hidden="true">⌄</span></button><div class="supplier-popover" data-combo-panel hidden><input type="search" data-combo-search aria-label="Pesquisar fornecedor" placeholder="Pesquisar fornecedor..."><div class="supplier-results" data-combo-results role="listbox"></div></div></div></div>';
 }
@@ -83,15 +86,16 @@ function showApp(){
   $('#userAvatar').textContent=(state.user.name||'F').slice(0,1).toUpperCase();
   $('#todayLabel').textContent=dateBR(today());
   document.querySelectorAll('.admin-only').forEach(el=>el.classList.toggle('hidden',state.user.role!=='admin'));
+  const views=allowedViews(state.user.role);
   document.querySelectorAll('.nav-link[data-view]').forEach(el=>{
-    el.classList.toggle('hidden',state.user.role!=='admin' && !['schedule','bookings'].includes(el.dataset.view));
+    el.classList.toggle('hidden',!views.includes(el.dataset.view));
   });
-  if(!state.dashFrom){state.dashFrom=firstOfMonth(today());state.dashTo=lastOfMonth(today());state.bookFrom=dateOffset(today(),-90);state.bookTo=dateOffset(today(),90);state.historyFrom=dateOffset(today(),-365);state.historyTo=today();state.slotDay=nextOpenDay(state.meta.current_time > '10:00' ? dateOffset(today(),1) : today())}
-  if(state.user.role!=='admin'&&!['schedule','bookings'].includes(state.view))state.view='schedule';
+  if(!state.dashFrom){state.dashFrom=firstOfMonth(today());state.dashTo=lastOfMonth(today());state.bookFrom=dateOffset(today(),-90);state.bookTo=dateOffset(today(),90);state.historyFrom=dateOffset(today(),-365);state.historyTo=today();state.slotDay=nextOpenDay(state.meta.current_time >= state.meta.scheduling.end_time ? dateOffset(today(),1) : today())}
+  if(!views.includes(state.view))state.view=defaultView(state.user.role);
   navigate(state.view);
 }
 function navigate(view){
-  if(state.user.role!=='admin'&&!['schedule','bookings'].includes(view))view='schedule';
+  if(!allowedViews(state.user.role).includes(view))view=defaultView(state.user.role);
   state.view=view;
   const titles={dashboard:'Dashboard',schedule:'Novo agendamento',bookings:'Agendamentos',users:'Usuários',admin:'Administração'};
   $('#pageTitle').textContent=titles[view];$('#crumb').textContent=titles[view].toUpperCase();
@@ -109,32 +113,38 @@ function bookingTable(rows,actions=true){
   return '<div class="table-wrap"><table class="data-table"><thead><tr><th>Senha</th><th>Data e horário</th><th>Fornecedor</th><th>Carga</th><th>Situação</th><th></th></tr></thead><tbody>'+rows.map(b=>'<tr><td><span class="cell-title">#'+String(b.id).padStart(3,'0')+'</span><span class="cell-sub">'+esc(b.vehicle_type)+'</span></td><td><span class="cell-title">'+dateBR(b.day)+'</span><span class="cell-sub">'+esc(b.slot)+'</span></td><td><span class="cell-title">'+esc(b.supplier_name)+'</span></td><td><span class="cell-title">'+formatWeight(b.weight_kg)+' kg</span><span class="cell-sub">'+formatNum(b.box_count)+' caixas · '+formatNum(b.item_count)+' itens</span></td><td><span class="badge '+b.status+'">'+(b.status==='active'?'● Confirmado':'○ Cancelado')+'</span></td><td><div class="mini-actions"><button type="button" class="btn" data-ticket="'+b.id+'">Senha</button>'+(actions&&b.status==='active'?'<button type="button" class="btn btn-danger" data-cancel="'+b.id+'">Cancelar</button>':'')+'</div></td></tr>').join('')+'</tbody></table></div>';
 }
 async function renderDashboard(){
-  $('#viewContent').innerHTML=pageHead('PAINEL DE CONTROLE','Dashboard','Indicadores das entregas no período selecionado.','<button class="btn" type="button" data-history-open>Pesquisar histórico</button><button class="btn btn-primary" type="button" data-view="schedule">＋ Novo agendamento</button>')+
-  '<div class="card filter-card"><div class="field"><label for="dashFrom">De</label><input id="dashFrom" type="date" value="'+state.dashFrom+'"></div><div class="field"><label for="dashTo">Até</label><input id="dashTo" type="date" value="'+state.dashTo+'"></div>'+(state.user.role==='admin'?'<div class="field grow"><label for="dashSupplier">Fornecedor</label><select id="dashSupplier">'+supplierOptions(state.dashSupplier,true)+'</select></div>':'')+'<button class="btn" id="applyDash" type="button">Aplicar filtro</button></div><div id="dashBody"><div class="empty-state">Carregando indicadores...</div></div>';
+  const admin=state.user.role==='admin',commercial=state.user.role==='commercial';
+  const actions=admin?'<button class="btn" type="button" data-history-open>Pesquisar histórico</button><button class="btn btn-primary" type="button" data-view="schedule">+ Novo agendamento</button>':'';
+  $('#viewContent').innerHTML=pageHead('PAINEL DE CONTROLE','Dashboard','Indicadores das entregas no período selecionado.',actions)+
+  '<div class="card filter-card"><div class="field"><label for="dashFrom">De</label><input id="dashFrom" type="date" value="'+state.dashFrom+'"></div><div class="field"><label for="dashTo">Até</label><input id="dashTo" type="date" value="'+state.dashTo+'"></div>'+(admin?'<div class="field grow"><label for="dashSupplier">Fornecedor</label><select id="dashSupplier">'+supplierOptions(state.dashSupplier,true)+'</select></div>':'')+'<button class="btn" id="applyDash" type="button">Aplicar filtro</button></div><div id="dashBody"><div class="empty-state">Carregando indicadores...</div></div>';
   try{
     const params=new URLSearchParams({from:state.dashFrom,to:state.dashTo});
     if(state.dashSupplier)params.set('supplier_id',state.dashSupplier);
-    const bookings=(await api('/api/bookings?'+params)).bookings;
-    const active=bookings.filter(b=>b.status==='active');
+    let active=[],summary=null;
+    if(commercial)summary=await api('/api/dashboard?'+params);
+    else active=(await api('/api/bookings?'+params)).bookings.filter(b=>b.status==='active');
     const sum=key=>active.reduce((a,b)=>a+Number(b[key]||0),0);
-    const cards=[['▣','Carros agendados',formatNum(active.length),'veículos'],['◈','Peso total',formatWeight(sum('weight_kg')),'kg'],['≡','Quantidade de itens',formatNum(sum('item_count')),'itens'],['▤','Quantidade de caixas',formatNum(sum('box_count')),'caixas']];
-    const weekdays=[['Segunda',1],['Terça',2],['Quarta',3],['Quinta',4],['Sexta',5],['Sábado',6]];
-    const weekdayCounts=weekdays.map(([name,index])=>({name,count:active.filter(b=>new Date(b.day+'T12:00:00Z').getUTCDay()===index).length}));
+    const totalBookings=commercial?Number(summary.carros||0):active.length;
+    const totalWeight=commercial?Number(summary.peso||0):sum('weight_kg');
+    const totalItems=commercial?Number(summary.items||0):sum('item_count');
+    const totalBoxes=commercial?Number(summary.boxes||0):sum('box_count');
+    const cards=[['▣','Carros agendados',formatNum(totalBookings),'veículos'],['◈','Peso total',formatWeight(totalWeight),'kg'],['≡','Quantidade de itens',formatNum(totalItems),'itens'],['▤','Quantidade de caixas',formatNum(totalBoxes),'caixas']];
+    const weekdays=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+    const weekdayCounts=commercial?summary.weekday_counts:weekdays.map((name,index)=>({name,count:active.filter(b=>new Date(b.day+'T12:00:00Z').getUTCDay()===index+1).length}));
     const maxDay=Math.max(1,...weekdayCounts.map(x=>x.count));
     const weekdayChart=weekdayCounts.map(x=>'<div class="chart-row"><span>'+x.name+'</span><div class="chart-track"><i style="width:'+(x.count/maxDay*100)+'%"></i></div><strong>'+formatNum(x.count)+'</strong></div>').join('');
     const colors=['#2b7fff','#71a8ff','#96bbff','#c9daf9'];
-    const cargo=state.meta.cargoTypes.map((name,index)=>({name,index,count:active.filter(b=>b.cargo_type===name).length}));
+    const cargo=state.meta.cargoTypes.map((name,index)=>({name,index,count:commercial?Number(summary.cargo_counts.find(x=>x.name===name)?.count||0):active.filter(b=>b.cargo_type===name).length}));
     let degrees=0;
-    const slices=cargo.map(x=>{const start=degrees;degrees+=active.length?x.count/active.length*360:0;return colors[x.index]+' '+start+'deg '+degrees+'deg'}).join(', ');
-    const donutStyle=active.length?'background:conic-gradient('+slices+')':'background:#e7eef8';
+    const slices=cargo.map(x=>{const start=degrees;degrees+=totalBookings?x.count/totalBookings*360:0;return colors[x.index]+' '+start+'deg '+degrees+'deg'}).join(', ');
+    const donutStyle=totalBookings?'background:conic-gradient('+slices+')':'background:#e7eef8';
     const legend=cargo.map(x=>'<div class="chart-legend-item"><i style="background:'+colors[x.index]+'"></i><span>'+esc(x.name)+'</span><strong>'+formatNum(x.count)+'</strong></div>').join('');
     $('#dashBody').innerHTML='<div class="stat-grid">'+cards.map(c=>'<div class="card stat-card"><div class="stat-icon">'+c[0]+'</div><p class="stat-label">'+c[1]+'</p><p class="stat-value">'+c[2]+'<span class="stat-unit">'+c[3]+'</span></p></div>').join('')+'</div>'+
       '<div class="charts-grid"><div class="card section-card"><div class="section-head"><div><h3>Entregas por dia da semana</h3><p>Quantidade de veículos confirmados no período</p></div></div><div class="weekday-chart">'+weekdayChart+'</div></div>'+
-      '<div class="card section-card"><div class="section-head"><div><h3>Tipos de carga</h3><p>Distribuição dos agendamentos confirmados</p></div></div><div class="cargo-chart"><div class="donut-chart" style="'+donutStyle+'"><div><strong>'+formatNum(active.length)+'</strong><small>entregas</small></div></div><div class="chart-legend">'+legend+'</div></div></div></div>'+
-      '<div class="dashboard-history card"><div><strong>Precisa consultar uma entrega?</strong><span>Pesquise o histórico com data, situação e fornecedor.</span></div><button class="btn" type="button" data-history-open>Abrir histórico →</button></div>';
+      '<div class="card section-card"><div class="section-head"><div><h3>Tipos de carga</h3><p>Distribuição dos agendamentos confirmados</p></div></div><div class="cargo-chart"><div class="donut-chart" style="'+donutStyle+'"><div><strong>'+formatNum(totalBookings)+'</strong><small>entregas</small></div></div><div class="chart-legend">'+legend+'</div></div></div></div>'+
+      (admin?'<div class="dashboard-history card"><div><strong>Precisa consultar uma entrega?</strong><span>Pesquise o histórico com data, situação e fornecedor.</span></div><button class="btn" type="button" data-history-open>Abrir histórico →</button></div>':'');
   }catch(e){$('#dashBody').innerHTML='<div class="empty-state">'+esc(e.message)+'</div>';toast(e.message,true)}
-}
-function supplierField(){
+}function supplierField(){
   if(state.user.role!=='admin')return '<div class="field"><label>Fornecedor</label><input value="'+esc(state.user.supplier_name)+'" disabled><small>Seu cadastro está vinculado a esta empresa.</small></div>';
   return supplierCombo('supplier');
 }
@@ -198,8 +208,8 @@ function openHistoryModal(){
 function closeHistoryModal(){$('#historyModal').classList.add('hidden')}
 async function renderUsers(){
   $('#viewContent').innerHTML=pageHead('GESTÃO DE ACESSOS','Usuários','Avalie solicitações e gerencie os acessos do portal.')+
-  '<div class="card section-card"><div class="section-head"><div><h3>Aguardando aprovação</h3><p>Escolha se cada conta terá acesso de fornecedor ou administrador.</p></div></div><div id="pendingBody" class="empty-state">Carregando...</div></div>'+
-  '<div class="card section-card users-card"><div class="section-head"><div><h3>Usuários do portal</h3><p>Contas ativas e pendentes. A exclusão de fornecedores mantém o histórico das entregas.</p></div></div><div id="adminUsersBody" class="empty-state">Carregando...</div></div>';
+  '<div class="card section-card"><div class="section-head"><div><h3>Aguardando aprovação</h3><p>Escolha se cada conta terá acesso de Administrador, Fornecedor ou Comercial.</p></div></div><div id="pendingBody" class="empty-state">Carregando...</div></div>'+
+  '<div class="card section-card users-card"><div class="section-head"><div><h3>Usuários do portal</h3><p>Altere o perfil de contas ativas. A exclusão de fornecedores mantém o histórico das entregas.</p></div></div><div id="adminUsersBody" class="empty-state">Carregando...</div></div>';
   await Promise.all([refreshPending(),refreshAdminUsers()]);
 }
 async function refreshPending(){
@@ -207,22 +217,38 @@ async function refreshPending(){
     const rows=(await api('/api/admin/pending')).users;
     const target=$('#pendingBody');if(!target)return;
     target.className='';
-    target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name||'Vínculo administrativo')+'</small>'+(u.requested_supplier_name?'<small class="requested-tag">Fornecedor digitado no cadastro</small>':'')+'</div><div class="approval-actions"><label class="sr-only" for="approveRole-'+esc(u.id)+'">Tipo de acesso</label><select id="approveRole-'+esc(u.id)+'" data-approve-role><option value="supplier">Fornecedor</option><option value="admin">Administrador</option></select><button class="btn btn-primary" data-approve="'+esc(u.id)+'">Aprovar</button></div></div>').join(''):'<div class="empty-state"><span class="empty-icon">✓</span><strong>Nenhuma aprovação pendente</strong><span>Novos cadastros aparecerão aqui.</span></div>';
+    target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name||'Vínculo administrativo')+'</small>'+(u.requested_supplier_name?'<small class="requested-tag">Fornecedor digitado no cadastro</small>':'')+'</div><div class="approval-actions"><label class="sr-only" for="approveRole-'+esc(u.id)+'">Tipo de acesso</label><select id="approveRole-'+esc(u.id)+'" data-approve-role><option value="supplier">Fornecedor</option><option value="admin">Administrador</option><option value="commercial">Comercial</option></select><button class="btn btn-primary" data-approve="'+esc(u.id)+'">Aprovar</button></div></div>').join(''):'<div class="empty-state"><span class="empty-icon">✓</span><strong>Nenhuma aprovação pendente</strong><span>Novos cadastros aparecerão aqui.</span></div>';
   }catch(e){const target=$('#pendingBody');if(target)target.textContent=e.message;toast(e.message,true)}
 }
 async function refreshAdminUsers(){
   try{
     const rows=(await api('/api/admin/users')).users;
+    state.adminUsers=rows;
     const target=$('#adminUsersBody');if(!target)return;
     target.className='';
-    target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item user-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name||'Sem fornecedor vinculado')+'</small></div><div class="user-actions"><span class="badge '+(u.role==='admin'?'role-admin':'role-supplier')+'">'+(u.role==='admin'?'Administrador':'Fornecedor')+'</span><span class="badge '+(u.status==='active'?'active':'cancelled')+'">'+(u.status==='active'?'Ativo':'Pendente')+'</span>'+(u.role==='supplier'?'<button class="btn btn-danger" type="button" data-delete-user="'+esc(u.id)+'">Excluir</button>':'')+'</div></div>').join(''):'<div class="empty-state"><strong>Nenhum usuário cadastrado</strong></div>';
+    target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item user-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name||'Sem fornecedor vinculado')+'</small></div><div class="user-actions"><span class="badge '+(u.role==='admin'?'role-admin':u.role==='commercial'?'role-commercial':'role-supplier')+'">'+esc(roleNames[u.role]||u.role)+'</span><span class="badge '+(u.status==='active'?'active':'cancelled')+'">'+(u.status==='active'?'Ativo':'Pendente')+'</span>'+(u.status==='active'&&u.id!==state.user.id?'<button class="btn" type="button" data-edit-user="'+esc(u.id)+'">Alterar perfil</button>':'')+(u.role==='supplier'?'<button class="btn btn-danger" type="button" data-delete-user="'+esc(u.id)+'">Excluir</button>':'')+'</div></div>').join(''):'<div class="empty-state"><strong>Nenhum usuário cadastrado</strong></div>';
   }catch(e){const target=$('#adminUsersBody');if(target)target.textContent=e.message;toast(e.message,true)}
 }
-function renderAdmin(){
-  $('#viewContent').innerHTML=pageHead('ADMINISTRAÇÃO','Fornecedores','Mantenha o cadastro de empresas atualizado.')+
-  '<div class="card supplier-card admin-supplier-card"><div class="section-head"><div><h3>Novo fornecedor</h3><p>Somente administradores podem cadastrar empresas diretamente.</p></div></div><form id="supplierForm"><div class="field"><label for="newSupplier">Razão social</label><input id="newSupplier" name="name" minlength="3" maxlength="160" required placeholder="Nome completo do fornecedor"></div><button type="submit" class="btn btn-primary">Cadastrar fornecedor</button></form><div class="info-panel" style="margin-top:22px"><h3>Base cadastrada</h3><p><strong>'+state.meta.suppliers.length+' fornecedores</strong> disponíveis para seleção.</p></div></div>';
+function openUserRoleModal(id){
+  const user=state.adminUsers.find(row=>String(row.id)===String(id));
+  if(!user)return;
+  state.editingUser=user;
+  $('#userRoleModalContent').innerHTML='<form id="userRoleForm"><p class="subtext">Escolha o perfil e, para Fornecedor, vincule a empresa que essa conta poderá acessar.</p><div class="field"><label for="userRole">Perfil</label><select id="userRole" name="role"><option value="admin"'+(user.role==='admin'?' selected':'')+'>Administrador</option><option value="supplier"'+(user.role==='supplier'?' selected':'')+'>Fornecedor</option><option value="commercial"'+(user.role==='commercial'?' selected':'')+'>Comercial</option></select></div><div id="userRoleSupplierField" class="field"><label for="userRoleSupplier">Fornecedor vinculado</label><select id="userRoleSupplier" name="supplier_id">'+supplierOptions(user.supplier_id)+'</select></div><div class="history-form-actions"><button type="button" class="btn" id="cancelUserRole">Cancelar</button><button type="submit" class="btn btn-primary">Salvar perfil</button></div></form>';
+  $('#userRoleModal').classList.remove('hidden');
+  updateUserRoleSupplierVisibility();
 }
-function openTicket(b){
+function closeUserRoleModal(){$('#userRoleModal').classList.add('hidden');state.editingUser=null}
+function updateUserRoleSupplierVisibility(){
+  const field=$('#userRoleSupplierField');
+  const role=$('#userRole')?.value;
+  if(field){field.hidden=role!=='supplier';$('#userRoleSupplier').required=role==='supplier'}
+}
+function renderAdmin(){
+  const rules=state.meta.scheduling;
+  $('#viewContent').innerHTML=pageHead('ADMINISTRAÇÃO','Configurações','Cadastre fornecedores e configure as regras que valem para todos os agendamentos.')+
+  '<div class="card section-card"><div class="section-head"><div><h3>Sistemática global de agendamento</h3><p>As regras salvas serão aplicadas a todos os fornecedores.</p></div></div><form id="schedulingForm" class="settings-form"><div class="field-row"><div class="field"><label for="scheduleStart">Início da janela</label><input id="scheduleStart" name="start_time" type="time" step="1800" value="'+esc(rules.start_time)+'" required></div><div class="field"><label for="scheduleEnd">Final da janela</label><input id="scheduleEnd" name="end_time" type="time" step="1800" value="'+esc(rules.end_time)+'" required><small>O horário final é o início da última faixa disponível.</small></div></div><div class="field-row"><div class="field"><label for="scheduleInterval">Intervalo entre faixas</label><select id="scheduleInterval" name="interval_minutes"><option value="30"'+(Number(rules.interval_minutes)===30?' selected':'')+'>A cada meia hora</option><option value="60"'+(Number(rules.interval_minutes)===60?' selected':'')+'>A cada hora</option></select></div><div class="field"><label for="scheduleCapacity">Carros por faixa</label><input id="scheduleCapacity" name="vehicles_per_slot" type="number" min="1" max="10000" step="1" value="'+esc(rules.vehicles_per_slot)+'" required></div></div><div class="field"><label for="scheduleDailyLimit">Limite de veículos por dia</label><input id="scheduleDailyLimit" name="daily_vehicle_limit" type="number" min="1" max="10000" step="1" value="'+esc(rules.daily_vehicle_limit)+'" required></div><button type="submit" class="btn btn-primary">Salvar sistemática</button></form></div>'+
+  '<div class="card supplier-card admin-supplier-card"><div class="section-head"><div><h3>Novo fornecedor</h3><p>Somente administradores podem cadastrar empresas diretamente.</p></div></div><form id="supplierForm"><div class="field"><label for="newSupplier">Razão social</label><input id="newSupplier" name="name" minlength="3" maxlength="160" required placeholder="Nome completo do fornecedor"></div><button type="submit" class="btn btn-primary">Cadastrar fornecedor</button></form><div class="info-panel" style="margin-top:22px"><h3>Base cadastrada</h3><p><strong>'+state.meta.suppliers.length+' fornecedores</strong> disponíveis para seleção.</p></div></div>';
+}function openTicket(b){
   $('#ticketContent').innerHTML='<div class="ticket"><div class="ticket-header"><small>SENHA PARA ENTREGA DE MERCADORIA</small><div class="ticket-number">'+String(b.id).padStart(3,'0')+'</div></div><p class="ticket-protocol">Apresente esta senha no check-in · Protocolo AGE-'+b.id+'</p>'+
   [['Data da entrega',dateBR(b.day)],['Horário agendado',b.slot],['Apresentação','05:00 às 05:00'],['Filial','ATACADAO DIA A DIA S.A. · 17.457.404/0023-17'],['Endereço','SETOR POLO DE D J KUBITSCHEK TR 5 CJ 1, S/N - SANTA MARIA - BRASILIA/DF - CEP 72549-710'],['Doca','FLV'],['Fornecedor',b.supplier_name],['Número do pedido',b.order_number||'—'],['Nota fiscal',b.invoice_number||'—'],['Peso da carga',formatWeight(b.weight_kg)+' kg'],['Quantidade de itens',formatNum(b.item_count)],['Quantidade de caixas',formatNum(b.box_count)],['Tipo de veículo',b.vehicle_type],['Tipo de carga',b.cargo_type],['Situação',b.status==='active'?'Confirmado':'Cancelado']].map(x=>'<div class="ticket-row"><span>'+esc(x[0])+'</span><strong>'+esc(x[1])+'</strong></div>').join('')+'<p class="ticket-footer">Apresente esta senha à portaria no dia da entrega.</p></div>';
   $('#printTicket').disabled=b.status!=='active';
@@ -272,6 +298,8 @@ document.addEventListener('click',async e=>{
     }catch(err){toast(err.message,true)}
     return;
   }
+  const editUser=e.target.closest('[data-edit-user]');
+  if(editUser){openUserRoleModal(editUser.dataset.editUser);return}
   const choice=e.target.closest('[data-combo-option]');
   if(choice){
     const combo=choice.closest('[data-supplier-combo]');
@@ -302,7 +330,7 @@ document.addEventListener('click',async e=>{
   const cancel=e.target.closest('[data-cancel]');
   if(cancel){if(!confirm('Cancelar este agendamento? A vaga será liberada.'))return;try{await api('/api/bookings/'+cancel.dataset.cancel+'/cancel','POST',{});toast('Agendamento cancelado.');await renderBookings()}catch(err){toast(err.message,true)}return}
   const approve=e.target.closest('[data-approve]');
-  if(approve){try{const role=approve.closest('.pending-item').querySelector('[data-approve-role]').value;await api('/api/admin/users/'+approve.dataset.approve+'/approve','POST',{role});toast(role==='admin'?'Acesso de administrador aprovado.':'Acesso de fornecedor aprovado.');await Promise.all([refreshPending(),refreshAdminUsers()]);state.meta=await api('/api/meta')}catch(err){toast(err.message,true)}return}
+  if(approve){try{const role=approve.closest('.pending-item').querySelector('[data-approve-role]').value;await api('/api/admin/users/'+approve.dataset.approve+'/approve','POST',{role});toast('Acesso de '+roleNames[role].toLowerCase()+' aprovado.');await Promise.all([refreshPending(),refreshAdminUsers()]);state.meta=await api('/api/meta')}catch(err){toast(err.message,true)}return}
   if(e.target.id==='applyDash'){
     state.dashFrom=$('#dashFrom').value;state.dashTo=$('#dashTo').value;state.dashSupplier=$('#dashSupplier')?.value||'';
     return renderDashboard();
@@ -315,6 +343,7 @@ document.addEventListener('click',async e=>{
   if(e.target.id==='mobileOverlay'){$('#sidebar').classList.remove('open');$('#mobileOverlay').classList.remove('show')}
   if(e.target.id==='closeTicket'||e.target.id==='ticketModal')$('#ticketModal').classList.add('hidden');
   if(e.target.id==='closeHistory'||e.target.id==='cancelHistory'||e.target.id==='historyModal')closeHistoryModal();
+  if(e.target.id==='closeUserRole'||e.target.id==='cancelUserRole'||e.target.id==='userRoleModal')closeUserRoleModal();
   if(e.target.id==='printTicket')window.print();
   if(e.target.id==='logoutBtn'){await api('/api/logout','POST',{});state.user=null;showAuth('login')}
 });
@@ -322,7 +351,7 @@ document.addEventListener('input',e=>{
   if(e.target.matches('[data-combo-search]'))renderComboResults(e.target.closest('[data-supplier-combo]'),e.target.value);
 });
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){closeSupplierCombos();closeHistoryModal();return}
+  if(e.key==='Escape'){closeSupplierCombos();closeHistoryModal();closeUserRoleModal();return}
   if(e.key==='Enter'&&e.target.matches('[data-combo-search]')){
     const first=e.target.closest('[data-supplier-combo]').querySelector('[data-combo-option]');
     if(first){e.preventDefault();first.click()}
@@ -334,10 +363,11 @@ document.addEventListener('keydown',e=>{
 });
 document.addEventListener('change',e=>{
   if(e.target.id==='bookingDay')state.slotDay=e.target.value;
+  if(e.target.id==='userRole')updateUserRoleSupplierVisibility();
 });
 document.addEventListener('submit',async e=>{
   const form=e.target;
-  if(!['bootstrapForm','registerForm','loginForm','bookingForm','supplierForm','historyForm'].includes(form.id))return;
+  if(!['bootstrapForm','registerForm','loginForm','bookingForm','supplierForm','historyForm','schedulingForm','userRoleForm'].includes(form.id))return;
   e.preventDefault();
   submitButton(form,true);
   const values=Object.fromEntries(new FormData(form));
@@ -371,6 +401,24 @@ document.addEventListener('submit',async e=>{
       state.meta.suppliers.sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
       toast('Fornecedor cadastrado.');
       await renderAdmin();
+    }
+    if(form.id==='schedulingForm'){
+      values.interval_minutes=Number(values.interval_minutes);
+      values.vehicles_per_slot=Number(values.vehicles_per_slot);
+      values.daily_vehicle_limit=Number(values.daily_vehicle_limit);
+      const result=await api('/api/admin/settings','POST',values);
+      state.meta.scheduling=result.scheduling;
+      toast('Sistemática atualizada para todos os fornecedores.');
+      await renderAdmin();
+    }
+    if(form.id==='userRoleForm'){
+      if(values.role==='supplier'&&!values.supplier_id)throw new Error('Selecione um fornecedor para este usuário.');
+      values.supplier_id=values.supplier_id?Number(values.supplier_id):null;
+      await api('/api/admin/users/'+state.editingUser.id+'/role','POST',values);
+      closeUserRoleModal();
+      toast('Perfil do usuário atualizado.');
+      await refreshAdminUsers();
+      state.meta=await api('/api/meta');
     }
     if(form.id==='historyForm'){
       if(values.from>values.to)throw new Error('A data inicial deve ser anterior à data final.');
