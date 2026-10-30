@@ -270,8 +270,7 @@ function renderAdmin(){
   $('#printTicket').title=b.status==='active'?'Imprimir senha':'Agendamento cancelado';
   $('#ticketModal').classList.remove('hidden');
 }
-function openBookingCapacityModal(message){
-  $('#bookingCapacityMessage').textContent=message;
+function openBookingCapacityModal(){
   $('#bookingCapacityModal').classList.remove('hidden');
   $('#closeBookingCapacity').focus();
 }
@@ -467,7 +466,7 @@ document.addEventListener('submit',async e=>{
   }catch(err){
     const message=String(err.message||'');
     const normalized=message.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-    if(form.id==='bookingForm'&&((normalized.includes('limite de ')&&normalized.includes('veiculos'))||normalized.includes('todos os horarios')||normalized.includes('horarios desta data')))openBookingCapacityModal(message);
+    if(form.id==='bookingForm'&&((normalized.includes('limite de ')&&normalized.includes('veiculos'))||normalized.includes('todos os horarios')||normalized.includes('horarios desta data')))openBookingCapacityModal();
     else toast(message,true);
   }
   finally{if(form.isConnected)submitButton(form,false)}

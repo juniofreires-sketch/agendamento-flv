@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1f40">
   <title>Portal FLV · Agendamento de entregas</title>
-  <link rel="stylesheet" href="/styles.css?v=6">
+  <link rel="stylesheet" href="/styles.css?v=7">
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -65,15 +65,19 @@
   </div>
   <div id="bookingCapacityModal" class="modal-backdrop capacity-backdrop hidden" role="alertdialog" aria-modal="true" aria-labelledby="bookingCapacityTitle" aria-describedby="bookingCapacityMessage">
     <section class="capacity-dialog">
-      <button type="button" id="closeBookingCapacity" class="capacity-close" aria-label="Fechar">×</button>
-      <div class="capacity-icon" aria-hidden="true">!</div>
-      <p class="capacity-eyebrow">AGENDA DESTA DATA ENCERRADA</p>
-      <h2 id="bookingCapacityTitle">Limite diário atingido</h2>
-      <p id="bookingCapacityMessage" class="capacity-message"></p>
-      <p class="capacity-note">Escolha outra data disponível para continuar. Se precisar de uma entrega fora da janela, entre em contato com o setor comercial.</p>
-      <button type="button" class="btn btn-primary capacity-button" data-capacity-close>Entendi</button>
+      <div class="capacity-top-row">
+        <div class="capacity-icon" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="7" width="22" height="20" rx="3"/><path d="M10 4v6M22 4v6M5 13h22"/><circle cx="16" cy="20" r="3.4"/><path d="M16 18v2.2l1.5 1"/></svg></div>
+        <button type="button" id="closeBookingCapacity" class="capacity-close" aria-label="Fechar">×</button>
+      </div>
+      <h2 id="bookingCapacityTitle">Limite de agendamentos atingido</h2>
+      <div id="bookingCapacityMessage" class="capacity-copy">
+        <p>Olá! Identificamos que o limite de agendamentos disponíveis foi atingido no momento.</p>
+        <p>Para realizar um novo agendamento, pedimos que entre em contato com a <strong>equipe Comercial</strong>, que poderá orientar você sobre como prosseguir.</p>
+        <p>Agradecemos pela compreensão e parceria!</p>
+      </div>
+      <div class="capacity-footer"><button type="button" class="btn btn-primary capacity-button" data-capacity-close>Entendi <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 10 4 4 8-8"/></svg></button></div>
     </section>
   </div>
-  <script type="module" src="/app.js?v=6"></script>
+  <script type="module" src="/app.js?v=7"></script>
 </body>
 </html>

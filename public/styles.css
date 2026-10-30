@@ -172,18 +172,24 @@ h1,h2,h3,.stat-value,.side-brand strong,.ticket-number{font-family:Inter,Arial,s
 #userRoleModalContent{padding:22px}
 .user-item>div:first-child{min-width:0;overflow-wrap:anywhere}
 .my-bookings{max-width:880px}
-.capacity-backdrop{z-index:120;background:rgba(5,20,43,.78);backdrop-filter:blur(5px)}
-.capacity-dialog{position:relative;width:min(100%,620px);padding:48px clamp(24px,6vw,64px) 42px;border:1px solid #dce8fb;border-radius:24px;background:linear-gradient(155deg,#fff 0%,#f6f9ff 100%);box-shadow:0 32px 100px rgba(0,20,58,.42);text-align:center;animation:capacity-enter .22s ease-out}
-.capacity-close{position:absolute;top:15px;right:17px;width:42px;height:42px;border:0;border-radius:12px;background:#edf3fc;color:#456487;font-size:27px;line-height:1;cursor:pointer}
-.capacity-close:hover{background:#dfeaff;color:#176df0}
-.capacity-icon{width:76px;height:76px;margin:0 auto 20px;border:8px solid #e8f1ff;border-radius:50%;display:grid;place-items:center;background:#2b7fff;color:white;font-size:39px;font-weight:800;box-shadow:0 8px 24px rgba(43,127,255,.25)}
-.capacity-eyebrow{margin:0 0 9px;color:#2779f3;font-size:11px;font-weight:900;letter-spacing:.19em}
-.capacity-dialog h2{margin:0;color:#0b2448;font-family:Manrope,Arial,sans-serif;font-size:clamp(25px,5vw,36px);line-height:1.15;letter-spacing:-.04em}
-.capacity-message{margin:18px auto 0;max-width:470px;color:#334f74;font-size:17px;line-height:1.55;font-weight:700}
-.capacity-note{margin:14px auto 0;max-width:460px;color:#7186a3;font-size:14px;line-height:1.6}
-.capacity-button{min-width:180px;min-height:49px;margin-top:28px;font-size:15px}
+.capacity-backdrop{z-index:120;background:rgba(16,35,64,.68);backdrop-filter:blur(6px)}
+.capacity-dialog{position:relative;width:min(100%,538px);padding:38px 39px 35px;border:2px solid #172338;border-radius:22px;background:#fff;box-shadow:0 30px 90px rgba(0,20,58,.38);text-align:left;animation:capacity-enter .22s ease-out;overflow:hidden}
+.capacity-dialog:before{content:'';position:absolute;left:0;right:0;top:0;height:4px;background:#176bff}
+.capacity-top-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:21px}
+.capacity-close{width:37px;height:37px;border:0;border-radius:11px;background:#f1f5fa;color:#7b8fa9;font-size:24px;line-height:1;cursor:pointer}
+.capacity-close:hover{background:#e5efff;color:#176df0}
+.capacity-icon{width:64px;height:64px;border:1px solid #d8e6ff;border-radius:18px;display:grid;place-items:center;background:#eaf1ff;color:#176bff}
+.capacity-icon svg{width:32px;height:32px}
+.capacity-dialog h2{margin:0 0 19px;color:#0b2448;font-family:Manrope,Arial,sans-serif;font-size:25px;line-height:1.25;letter-spacing:-.045em}
+.capacity-copy{color:#536b8c;font-size:15px;line-height:1.58}
+.capacity-copy p{margin:0 0 15px}
+.capacity-copy p:last-child{margin-bottom:25px}
+.capacity-copy strong{color:#153d71;font-weight:800}
+.capacity-footer{display:flex;justify-content:flex-end;border-top:1px solid #e1e8f1;padding-top:24px}
+.capacity-button{min-width:150px;min-height:48px;display:inline-flex;align-items:center;justify-content:center;gap:9px;font-size:14px}
+.capacity-button svg{width:17px;height:17px}
 @keyframes capacity-enter{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
-@media(max-width:520px){.capacity-backdrop{padding:15px}.capacity-dialog{padding:42px 22px 28px;border-radius:19px}.capacity-icon{width:64px;height:64px;font-size:32px}.capacity-message{font-size:15px}.capacity-note{font-size:13px}.capacity-button{width:100%}}
+@media(max-width:520px){.capacity-backdrop{padding:15px}.capacity-dialog{padding:31px 22px 24px;border-radius:19px}.capacity-icon{width:58px;height:58px}.capacity-dialog h2{font-size:22px}.capacity-copy{font-size:14px}.capacity-footer .capacity-button{width:100%}}
 @media print{#bookingCapacityModal{display:none!important}}
 @media(max-width:1000px){.auth-intro{padding:35px}.auth-hero-copy{margin-top:65px}.auth-intro h1{font-size:48px}.auth-card{padding:25px}.auth-inner{padding:37px 30px}}
 @media(max-width:720px){.auth-screen{display:block}.auth-intro{min-height:280px;padding:28px 24px;background-position:center 58%}.auth-intro .hero-logo{display:block;width:138px;height:44px;padding:7px 11px}.auth-hero-copy{margin-top:30px}.auth-hero-copy .eyebrow{font-size:10px;margin-bottom:23px}.auth-hero-copy .eyebrow:after{bottom:-9px}.auth-intro h1{font-size:38px;line-height:1.03;margin-bottom:9px}.intro-copy{font-size:12px;max-width:360px}.intro-bottom,.auth-mobile-brand{display:none}.auth-card{padding:20px 16px 32px}.auth-inner{width:100%;padding:28px 22px;box-shadow:0 10px 35px rgba(31,78,143,.1)}.auth-inner h2{font-size:29px}.user-item{align-items:flex-start}.user-actions{flex-direction:column;align-items:flex-end;gap:6px}.approval-actions{width:100%;justify-content:flex-start}.approval-actions select{flex:1}}
