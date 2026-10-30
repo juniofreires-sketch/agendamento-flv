@@ -61,9 +61,10 @@ create table if not exists public.bookings (
   box_count integer not null check (box_count >= 0),
   vehicle_type text not null check (vehicle_type in ('3/4','BITREM','CARRETA 24','CARRETA 26','CARRETA 28','CARRETA 30','FIORINO','TOCO','TRUCK','VUC')),
   cargo_type text not null check (cargo_type in ('Batida / Paletizada','Carga batida','Paletizada','Pallet sobreposto')),
-  status text not null default 'active' check (status in ('active','cancelled')),
+  status text not null default 'active' check (status in ('active','cancelled','no_show')),
   created_at timestamptz not null default now(),
-  cancelled_at timestamptz
+  cancelled_at timestamptz,
+  no_show_at timestamptz
 );
 create index if not exists bookings_day_slot_idx on public.bookings(day,slot) where status='active';
 create index if not exists bookings_supplier_day_idx on public.bookings(supplier_id,day desc);
@@ -264,6 +265,17 @@ as $$
 begin
   if old.user_id is not null and new.user_id is null
      and (to_jsonb(new) - 'user_id') = (to_jsonb(old) - 'user_id') then
+    return new;
+  end if;
+  if old.status = 'active' and new.status = 'no_show' then
+    if not (select private.is_admin()) then
+      raise exception 'Only administrators can mark a booking as No show.';
+    end if;
+    if (to_jsonb(new) - 'status' - 'no_show_at') is distinct from
+       (to_jsonb(old) - 'status' - 'no_show_at') then
+      raise exception 'Only the No show status can be changed.';
+    end if;
+    new.no_show_at := now();
     return new;
   end if;
   if old.status <> 'active' or new.status <> 'cancelled' then
@@ -483,3 +495,59 @@ end;
 $$;
 revoke all on function public.commercial_dashboard(date,date) from public, anon, authenticated;
 grant execute on function public.commercial_dashboard(date,date) to authenticated;
+
+create or replace function public.admin_mark_booking_no_show(p_booking_id bigint)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare
+  booking_day date;
+  booking_status text;
+begin
+  if (select auth.uid()) is null or not (select private.is_admin()) then
+    raise exception 'Only administrators can mark a booking as No show.';
+  end if;
+  select b.day,b.status into booking_day,booking_status
+  from public.bookings b where b.id=p_booking_id for update;
+  if not found then raise exception 'Booking not found.'; end if;
+  if booking_status <> 'active' then raise exception 'Only confirmed bookings can be marked as No show.'; end if;
+  if booking_day > ((now() at time zone 'America/Sao_Paulo')::date) then
+    raise exception 'No show can only be recorded on or after the booking date.';
+  end if;
+  update public.bookings set status='no_show' where id=p_booking_id;
+end;
+$$;
+revoke all on function public.admin_mark_booking_no_show(bigint) from public, anon, authenticated;
+grant execute on function public.admin_mark_booking_no_show(bigint) to authenticated;
+
+create or replace function public.dashboard_daily_supplier_summary(p_from date,p_to date)
+returns table(day date,supplier_id bigint,supplier_name text,appointment_count bigint,slots text)
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  requester public.profiles%rowtype;
+begin
+  select * into requester from public.profiles p where p.id=(select auth.uid());
+  if requester.id is null or requester.status<>'active' or requester.role not in ('admin','commercial') then
+    raise exception 'No permission to access this dashboard.';
+  end if;
+  if p_from is null or p_to is null or p_from>p_to then raise exception 'Invalid date range.'; end if;
+  if requester.role='admin' then
+    return query
+      select b.day,b.supplier_id,s.name,count(*)::bigint,
+        pg_catalog.string_agg(pg_catalog.to_char(b.slot,'HH24:MI'),', ' order by b.slot)
+      from public.bookings b join public.suppliers s on s.id=b.supplier_id
+      where b.day between p_from and p_to and b.status='active'
+      group by b.day,b.supplier_id,s.name
+      order by b.day,s.name;
+    return;
+  end if;
+  return query
+    select b.day,null::bigint,null::text,count(distinct b.supplier_id)::bigint,null::text
+    from public.bookings b
+    where b.day between p_from and p_to and b.status='active'
+    group by b.day
+    order by b.day;
+end;
+$$;
+revoke all on function public.dashboard_daily_supplier_summary(date,date) from public, anon, authenticated;
+grant execute on function public.dashboard_daily_supplier_summary(date,date) to authenticated;

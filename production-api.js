@@ -27,7 +27,7 @@ const bookingRow = row => ({
   slot: String(row.slot).slice(0,5),
   supplier_name: row.suppliers?.name || ''
 });
-const bookingSelect = 'id,supplier_id,user_id,day,slot,order_number,invoice_number,weight_kg,item_count,box_count,vehicle_type,cargo_type,status,created_at,cancelled_at,suppliers(name)';
+const bookingSelect = 'id,supplier_id,user_id,day,slot,order_number,invoice_number,weight_kg,item_count,box_count,vehicle_type,cargo_type,status,created_at,cancelled_at,no_show_at,suppliers(name)';
 async function profileFor(user){
   const {data,error}=await supabase.from('profiles')
     .select('id,name,email,role,status,supplier_id,requested_supplier_name,suppliers(name)')
@@ -112,6 +112,16 @@ export async function api(path,method='GET',body){
     const {data,error}=await supabase.rpc('commercial_dashboard',{p_from:from,p_to:to});
     fail(error);return data;
   }
+  if(p==='/api/dashboard/daily-suppliers'&&method==='GET'){
+    const profile=await signedInProfile();
+    if(!profile||profile.status!=='active'||!['admin','commercial'].includes(profile.role))throw new Error('Sem permiss\u00e3o para acessar este painel.');
+    const from=url.searchParams.get('from')||'0001-01-01',to=url.searchParams.get('to')||'9999-12-31';
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)throw new Error('Per\u00edodo inv\u00e1lido.');
+    const {data,error}=await supabase.rpc('dashboard_daily_supplier_summary',{p_from:from,p_to:to});
+    fail(error);
+    const supplierId=profile.role==='admin'?Number(url.searchParams.get('supplier_id')||0):0;
+    return (data||[]).filter(row=>!supplierId||Number(row.supplier_id)===supplierId);
+  }
   if(p==='/api/logout'&&method==='POST'){
     const {error}=await supabase.auth.signOut();fail(error);return {ok:true};
   }
@@ -152,6 +162,15 @@ export async function api(path,method='GET',body){
     };
     const {data,error}=await supabase.from('bookings').insert(payload).select(bookingSelect).single();
     fail(error);return {booking:bookingRow(data)};
+  }
+  const noShow=/^\/api\/bookings\/(\d+)\/no-show$/.exec(p);
+  if(noShow&&method==='POST'){
+    const profile=await signedInProfile();
+    if(!profile||profile.role!=='admin'||profile.status!=='active')throw new Error('Apenas administradores podem marcar No show.');
+    const {error}=await supabase.rpc('admin_mark_booking_no_show',{p_booking_id:Number(noShow[1])});
+    fail(error);
+    const {data,error:readError}=await supabase.from('bookings').select(bookingSelect).eq('id',Number(noShow[1])).single();
+    fail(readError);return {booking:bookingRow(data)};
   }
   const id=endpointId(p);
   if(id && method==='GET' && !p.endsWith('/cancel')){

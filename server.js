@@ -14,7 +14,7 @@ db.exec([
   'CREATE TABLE IF NOT EXISTS suppliers (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE)',
   'CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN (\'admin\',\'supplier\',\'commercial\')), status TEXT NOT NULL CHECK(status IN (\'active\',\'pending\')), supplier_id INTEGER REFERENCES suppliers(id), requested_supplier_name TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)',
   'CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires_at TEXT NOT NULL)',
-  'CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, supplier_id INTEGER NOT NULL REFERENCES suppliers(id), user_id TEXT REFERENCES users(id) ON DELETE SET NULL, day TEXT NOT NULL, slot TEXT NOT NULL, order_number TEXT, invoice_number TEXT, weight_kg REAL NOT NULL, item_count INTEGER NOT NULL, box_count INTEGER NOT NULL, vehicle_type TEXT NOT NULL, cargo_type TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN (\'active\',\'cancelled\')), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, cancelled_at TEXT)',
+  'CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, supplier_id INTEGER NOT NULL REFERENCES suppliers(id), user_id TEXT REFERENCES users(id) ON DELETE SET NULL, day TEXT NOT NULL, slot TEXT NOT NULL, order_number TEXT, invoice_number TEXT, weight_kg REAL NOT NULL, item_count INTEGER NOT NULL, box_count INTEGER NOT NULL, vehicle_type TEXT NOT NULL, cargo_type TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN (\'active\',\'cancelled\',\'no_show\')), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, cancelled_at TEXT, no_show_at TEXT)',
   'CREATE INDEX IF NOT EXISTS bookings_day_slot ON bookings(day, slot, status)',
   'CREATE INDEX IF NOT EXISTS bookings_supplier ON bookings(supplier_id, day)'
 ].join(';\n') + ';');
@@ -32,11 +32,15 @@ if (!usersTableSql.includes("'commercial'")) {
     PRAGMA foreign_keys=ON;`);
 }
 const bookingUserColumn = db.prepare('PRAGMA table_info(bookings)').all().find(col => col.name === 'user_id');
-if (bookingUserColumn?.notnull) {
+const bookingColumns = db.prepare('PRAGMA table_info(bookings)').all();
+const bookingsTableSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='bookings'").get()?.sql || '';
+if (bookingUserColumn?.notnull || !bookingsTableSql.includes("'no_show'") || !bookingColumns.some(col => col.name === 'no_show_at')) {
+  const priorNoShowAt = bookingColumns.some(col => col.name === 'no_show_at') ? 'no_show_at' : 'NULL';
   db.exec(`PRAGMA foreign_keys=OFF;
     BEGIN IMMEDIATE;
-    CREATE TABLE bookings_new (id INTEGER PRIMARY KEY AUTOINCREMENT, supplier_id INTEGER NOT NULL REFERENCES suppliers(id), user_id TEXT REFERENCES users(id) ON DELETE SET NULL, day TEXT NOT NULL, slot TEXT NOT NULL, order_number TEXT, invoice_number TEXT, weight_kg REAL NOT NULL, item_count INTEGER NOT NULL, box_count INTEGER NOT NULL, vehicle_type TEXT NOT NULL, cargo_type TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('active','cancelled')), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, cancelled_at TEXT);
-    INSERT INTO bookings_new SELECT * FROM bookings;
+    CREATE TABLE bookings_new (id INTEGER PRIMARY KEY AUTOINCREMENT, supplier_id INTEGER NOT NULL REFERENCES suppliers(id), user_id TEXT REFERENCES users(id) ON DELETE SET NULL, day TEXT NOT NULL, slot TEXT NOT NULL, order_number TEXT, invoice_number TEXT, weight_kg REAL NOT NULL, item_count INTEGER NOT NULL, box_count INTEGER NOT NULL, vehicle_type TEXT NOT NULL, cargo_type TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('active','cancelled','no_show')), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, cancelled_at TEXT, no_show_at TEXT);
+    INSERT INTO bookings_new(id,supplier_id,user_id,day,slot,order_number,invoice_number,weight_kg,item_count,box_count,vehicle_type,cargo_type,status,created_at,cancelled_at,no_show_at)
+      SELECT id,supplier_id,user_id,day,slot,order_number,invoice_number,weight_kg,item_count,box_count,vehicle_type,cargo_type,status,created_at,cancelled_at,${priorNoShowAt} FROM bookings;
     DROP TABLE bookings;
     ALTER TABLE bookings_new RENAME TO bookings;
     CREATE INDEX bookings_day_slot ON bookings(day, slot, status);
@@ -275,6 +279,28 @@ const server = http.createServer(async (req,res) => {
       const rows = db.prepare(sql).all(...(supplier?[from,to,supplier]:[from,to]));
       return json(res,200,{bookings:rows.map(bookingRow)});
     }
+    if (req.method === 'GET' && p === '/api/dashboard/daily-suppliers') {
+      const user=requireUser(req,res);if(!user)return;
+      if(!['admin','commercial'].includes(user.role))return fail(res,403,'Sem permiss\u00e3o para acessar este painel.');
+      const from=url.searchParams.get('from')||'0000-01-01',to=url.searchParams.get('to')||'9999-12-31';
+      if(!isValidDay(from)||!isValidDay(to)||from>to)return fail(res,400,'Per\u00edodo inv\u00e1lido.');
+      const selectedSupplier=user.role==='admin'?Number(url.searchParams.get('supplier_id')||0):0;
+      const query=selectBookings+" WHERE b.day BETWEEN ? AND ? AND b.status='active'"+(selectedSupplier?' AND b.supplier_id=?':'')+' ORDER BY b.day,b.supplier_name,b.slot';
+      const bookings=db.prepare(query).all(...(selectedSupplier?[from,to,selectedSupplier]:[from,to]));
+      const grouped=new Map();
+      for(const booking of bookings){
+        const key=booking.day+':'+booking.supplier_id;
+        let row=grouped.get(key);
+        if(!row){row={day:booking.day,supplier_id:booking.supplier_id,supplier_name:booking.supplier_name,appointment_count:0,slotSet:new Set()};grouped.set(key,row)}
+        row.appointment_count++;row.slotSet.add(String(booking.slot).slice(0,5));
+      }
+      if(user.role==='commercial'){
+        const byDay=new Map();
+        for(const row of grouped.values())byDay.set(row.day,(byDay.get(row.day)||0)+1);
+        return json(res,200,Array.from(byDay,([day,count])=>({day,supplier_id:null,supplier_name:null,appointment_count:count,slots:null})));
+      }
+      return json(res,200,Array.from(grouped.values()).map(row=>({day:row.day,supplier_id:row.supplier_id,supplier_name:row.supplier_name,appointment_count:row.appointment_count,slots:Array.from(row.slotSet).sort().join(', ')})));
+    }
     if (req.method === 'GET' && p === '/api/dashboard') {
       const user = requireUser(req,res); if (!user) return;
       if (!['admin','commercial'].includes(user.role)) return fail(res,403,'Sem permissão para acessar este painel.');
@@ -286,7 +312,7 @@ const server = http.createServer(async (req,res) => {
       const cargoCounts=cargoTypes.map(name=>({name,count:rows.filter(b=>b.cargo_type===name).length}));
       return json(res,200,{carros:rows.length,peso:rows.reduce((sum,b)=>sum+Number(b.weight_kg||0),0),items:rows.reduce((sum,b)=>sum+Number(b.item_count||0),0),boxes:rows.reduce((sum,b)=>sum+Number(b.box_count||0),0),weekday_counts:weekdayCounts,cargo_counts:cargoCounts});
     }
-    const match = /^\/api\/bookings\/(\d+)(?:\/(cancel))?$/.exec(p);
+    const match = /^\/api\/bookings\/(\d+)(?:\/(cancel|no-show))?$/.exec(p);
     if (match && req.method === 'GET' && !match[2]) {
       const user = requireUser(req,res); if (!user) return;
       return sendBooking(res,Number(match[1]),user);
@@ -295,8 +321,17 @@ const server = http.createServer(async (req,res) => {
       const user = requireUser(req,res); if (!user) return;
       const b = db.prepare('SELECT * FROM bookings WHERE id=?').get(Number(match[1]));
       if (!b || (user.role !== 'admin' && b.supplier_id !== user.supplier_id)) return fail(res,404,'Agendamento não encontrado.');
-      if (b.status === 'cancelled') return fail(res,409,'Este agendamento já está cancelado.');
+      if (b.status !== 'active') return fail(res,409,'Somente agendamentos confirmados podem ser cancelados.');
       db.prepare("UPDATE bookings SET status='cancelled',cancelled_at=CURRENT_TIMESTAMP WHERE id=?").run(b.id);
+      return sendBooking(res,b.id,user);
+    }
+    if (match && req.method === 'POST' && match[2] === 'no-show') {
+      const user = requireUser(req,res,true); if (!user) return;
+      const b = db.prepare('SELECT * FROM bookings WHERE id=?').get(Number(match[1]));
+      if (!b) return fail(res,404,'Agendamento não encontrado.');
+      if (b.status !== 'active') return fail(res,409,'Somente agendamentos confirmados podem ser marcados como No show.');
+      if (b.day > nowParts().day) return fail(res,400,'O status No show só pode ser registrado no dia do agendamento ou depois.');
+      db.prepare("UPDATE bookings SET status='no_show',no_show_at=CURRENT_TIMESTAMP WHERE id=?").run(b.id);
       return sendBooking(res,b.id,user);
     }
     if (req.method === 'GET' && p === '/api/admin/pending') {

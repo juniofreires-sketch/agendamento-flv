@@ -199,6 +199,22 @@ h1,h2,h3,.stat-value,.side-brand strong,.ticket-number{font-family:Inter,Arial,s
 @keyframes capacity-enter{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
 @media(max-width:520px){.capacity-backdrop{padding:15px}.capacity-dialog{padding:31px 22px 24px;border-radius:19px}.capacity-icon{width:58px;height:58px}.capacity-dialog h2{font-size:22px}.capacity-copy{font-size:14px}.capacity-footer .capacity-button{width:100%}}
 @media print{#bookingCapacityModal{display:none!important}}
+.badge.no_show{color:#865b06;background:#fff2d5}
+.mini-actions .btn-no-show{border-color:#efd495;background:#fffaf0;color:#805d08}
+.mini-actions .btn-no-show:hover{border-color:#d8ae4e;background:#fff2d5}
+.weekday-chart.daily-supplier-chart{max-height:430px;overflow:auto;padding:5px 4px 6px}
+.daily-supplier-chart .chart-row{grid-template-columns:minmax(112px,auto) minmax(70px,1fr) 32px 34px;gap:11px;margin:10px 0}
+.daily-supplier-chart.summary-only .chart-row{grid-template-columns:minmax(112px,auto) minmax(70px,1fr) 32px}
+.chart-day-label{display:flex;flex-direction:column;gap:3px;min-width:0;color:#536c8b;font-weight:700;text-transform:capitalize}
+.chart-day-label small{font-size:10px;color:#8294ad;font-weight:500;text-transform:none}
+.daily-supplier-chart .chart-row strong{font-size:12px}
+.day-detail-button{width:30px;height:30px;padding:0;border:1px solid #cbdcf3;border-radius:9px;background:#fff;color:#2478f4;font:inherit;font-size:20px;line-height:1;cursor:pointer}
+.day-detail-button:hover{background:#eaf2ff;border-color:#91b9f5}
+.dashboard-day-window{width:min(100%,760px)}
+.dashboard-day-content{padding:5px 22px 23px}
+.supplier-day-table{min-width:500px}
+@media(max-width:720px){.daily-supplier-chart .chart-row{grid-template-columns:minmax(80px,auto) minmax(32px,1fr) 25px 30px;gap:7px}.chart-day-label{font-size:11px}.chart-day-label small{font-size:9px}.dashboard-day-content{padding:2px 14px 16px}.dashboard-day-window .modal-toolbar strong{font-size:13px}}
+@media(max-width:720px){.daily-supplier-chart.summary-only .chart-row{grid-template-columns:minmax(80px,auto) minmax(32px,1fr) 25px}}
 @media(max-width:1000px){.auth-intro{padding:35px}.auth-hero-copy{margin-top:65px}.auth-intro h1{font-size:48px}.auth-card{padding:25px}.auth-inner{padding:37px 30px}}
 @media(max-width:720px){.auth-screen{display:block}.auth-intro{min-height:280px;padding:28px 24px;background-position:center 58%}.auth-intro .hero-logo{display:block;width:138px;height:44px;padding:7px 11px}.auth-hero-copy{margin-top:30px}.auth-hero-copy .eyebrow{font-size:10px;margin-bottom:23px}.auth-hero-copy .eyebrow:after{bottom:-9px}.auth-intro h1{font-size:38px;line-height:1.03;margin-bottom:9px}.intro-copy{font-size:12px;max-width:360px}.intro-bottom,.auth-mobile-brand{display:none}.auth-card{padding:20px 16px 32px}.auth-inner{width:100%;padding:28px 22px;box-shadow:0 10px 35px rgba(31,78,143,.1)}.auth-inner h2{font-size:29px}.user-item{align-items:flex-start}.user-actions{flex-direction:column;align-items:flex-end;gap:6px}.approval-actions{width:100%;justify-content:flex-start}.approval-actions select{flex:1}}
 @media print{.auth-intro,.auth-card{display:none!important}}

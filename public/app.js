@@ -8,7 +8,7 @@ const api = async (url, method='GET', body) => {
   if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a operação.');
   return data;
 };
-const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],availabilityRequest:0,bookings:[],pending:[],adminUsers:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0};
+const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardSupplierRows:[],bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],availabilityRequest:0,bookings:[],pending:[],adminUsers:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0};
 const dateBR = day => day ? day.split('-').reverse().join('/') : '—';
 const shortDate = day => new Intl.DateTimeFormat('pt-BR',{weekday:'long',day:'2-digit',month:'long'}).format(new Date(day+'T12:00:00Z'));
 const formatNum = n => new Intl.NumberFormat('pt-BR').format(n || 0);
@@ -109,45 +109,69 @@ function navigate(view){
   if(view==='admin')renderAdmin();
 }
 const pageHead=(kicker,title,description,action='')=>'<div class="page-head"><div><p class="eyebrow">'+kicker+'</p><h1>'+title+'</h1><p>'+description+'</p></div><div class="page-actions">'+action+'</div></div>';
-function bookingTable(rows,actions=true){
+const bookingStatusLabel=status=>status==='active'?'● Confirmado':status==='no_show'?'⚠ No show':'○ Cancelado';
+function bookingTable(rows,actions=true,adminCheck=false){
   if(!rows.length)return '<div class="empty-state"><span class="empty-icon">▤</span><strong>Nenhum agendamento encontrado</strong><span>Altere o período ou crie um novo agendamento.</span></div>';
-  return '<div class="table-wrap"><table class="data-table"><thead><tr><th>Senha</th><th>Data e horário</th><th>Fornecedor</th><th>Carga</th><th>Situação</th><th></th></tr></thead><tbody>'+rows.map(b=>'<tr><td><span class="cell-title">#'+String(b.id).padStart(3,'0')+'</span><span class="cell-sub">'+esc(b.vehicle_type)+'</span></td><td><span class="cell-title">'+dateBR(b.day)+'</span><span class="cell-sub">'+esc(b.slot)+'</span></td><td><span class="cell-title">'+esc(b.supplier_name)+'</span></td><td><span class="cell-title">'+formatWeight(b.weight_kg)+' kg</span><span class="cell-sub">'+formatNum(b.box_count)+' caixas · '+formatNum(b.item_count)+' itens</span></td><td><span class="badge '+b.status+'">'+(b.status==='active'?'● Confirmado':'○ Cancelado')+'</span></td><td><div class="mini-actions"><button type="button" class="btn" data-ticket="'+b.id+'">Senha</button>'+(actions&&b.status==='active'?'<button type="button" class="btn btn-danger" data-cancel="'+b.id+'">Cancelar</button>':'')+'</div></td></tr>').join('')+'</tbody></table></div>';
+  return '<div class="table-wrap"><table class="data-table"><thead><tr><th>Senha</th><th>Data e horário</th><th>Fornecedor</th><th>Carga</th><th>Situação</th><th></th></tr></thead><tbody>'+rows.map(b=>'<tr><td><span class="cell-title">#'+String(b.id).padStart(3,'0')+'</span><span class="cell-sub">'+esc(b.vehicle_type)+'</span></td><td><span class="cell-title">'+dateBR(b.day)+'</span><span class="cell-sub">'+esc(b.slot)+'</span></td><td><span class="cell-title">'+esc(b.supplier_name)+'</span></td><td><span class="cell-title">'+formatWeight(b.weight_kg)+' kg</span><span class="cell-sub">'+formatNum(b.box_count)+' caixas · '+formatNum(b.item_count)+' itens</span></td><td><span class="badge '+b.status+'">'+bookingStatusLabel(b.status)+'</span></td><td><div class="mini-actions"><button type="button" class="btn" data-ticket="'+b.id+'">Senha</button>'+(adminCheck&&b.status==='active'&&b.day<=today()?'<button type="button" class="btn btn-no-show" data-no-show="'+b.id+'" title="Marcar como No show">Check</button>':'')+(actions&&b.status==='active'?'<button type="button" class="btn btn-danger" data-cancel="'+b.id+'">Cancelar</button>':'')+'</div></td></tr>').join('')+'</tbody></table></div>';
 }
+function summarizeBookingsBySupplierDay(bookings){
+  const groups=new Map();
+  for(const booking of bookings){
+    const key=booking.day+':'+booking.supplier_id;
+    let row=groups.get(key);
+    if(!row){row={day:booking.day,supplier_id:booking.supplier_id,supplier_name:booking.supplier_name,appointment_count:0,slotSet:new Set()};groups.set(key,row)}
+    row.appointment_count++;
+    row.slotSet.add(String(booking.slot).slice(0,5));
+  }
+  return Array.from(groups.values()).map(row=>({day:row.day,supplier_id:row.supplier_id,supplier_name:row.supplier_name,appointment_count:row.appointment_count,slots:Array.from(row.slotSet).sort().join(', ')}));
+}
+const weekdayName=day=>new Intl.DateTimeFormat('pt-BR',{weekday:'long'}).format(new Date(day+'T12:00:00Z')).replace(/^./,letter=>letter.toUpperCase());
 async function renderDashboard(){
   const requestId=++state.dashRequest;
   const admin=state.user.role==='admin',commercial=state.user.role==='commercial';
   const actions=admin?'<button class="btn" type="button" data-history-open>Pesquisar histórico</button><button class="btn btn-primary" type="button" data-view="schedule">+ Novo agendamento</button>':'';
-  $('#viewContent').innerHTML=pageHead('PAINEL DE CONTROLE','Dashboard','Indicadores das entregas no período selecionado.',actions)+
-  '<div class="card filter-card"><div class="field"><label for="dashFrom">De</label><input id="dashFrom" type="date" value="'+state.dashFrom+'"></div><div class="field"><label for="dashTo">Até</label><input id="dashTo" type="date" value="'+state.dashTo+'"></div>'+(admin?'<div class="field grow"><label for="dashSupplier">Fornecedor</label><select id="dashSupplier">'+supplierOptions(state.dashSupplier,true)+'</select></div>':'')+'<small id="dashFilterFeedback" class="filter-feedback" aria-live="polite">Os resultados são atualizados automaticamente.</small></div><div id="dashBody"><div class="empty-state">Carregando indicadores...</div></div>';
+  $('#viewContent').innerHTML=pageHead('PAINEL DE CONTROLE','Dashboard','Indicadores das entregas no período selecionado.',actions)+'<div class="card filter-card"><div class="field"><label for="dashFrom">De</label><input id="dashFrom" type="date" value="'+state.dashFrom+'"></div><div class="field"><label for="dashTo">Até</label><input id="dashTo" type="date" value="'+state.dashTo+'"></div>'+(admin?'<div class="field grow"><label for="dashSupplier">Fornecedor</label><select id="dashSupplier">'+supplierOptions(state.dashSupplier,true)+'</select></div>':'')+'<small id="dashFilterFeedback" class="filter-feedback" aria-live="polite">Os resultados são atualizados automaticamente.</small></div><div id="dashBody"><div class="empty-state">Carregando indicadores...</div></div>';
   try{
     const params=new URLSearchParams({from:state.dashFrom,to:state.dashTo});
     if(state.dashSupplier)params.set('supplier_id',state.dashSupplier);
-    let active=[],summary=null;
-    if(commercial)summary=await api('/api/dashboard?'+params);
-    else active=(await api('/api/bookings?'+params)).bookings.filter(b=>b.status==='active');
+    let active=[],summary=null,dailySupplierRows=[];
+    if(commercial){
+      summary=await api('/api/dashboard?'+params);
+    }else{
+      active=(await api('/api/bookings?'+params)).bookings.filter(booking=>booking.status==='active');
+    }
+    dailySupplierRows=await api('/api/dashboard/daily-suppliers?'+params);
     if(requestId!==state.dashRequest)return;
+    state.dashboardSupplierRows=dailySupplierRows;
     const sum=key=>active.reduce((a,b)=>a+Number(b[key]||0),0);
     const totalBookings=commercial?Number(summary.carros||0):active.length;
     const totalWeight=commercial?Number(summary.peso||0):sum('weight_kg');
     const totalItems=commercial?Number(summary.items||0):sum('item_count');
     const totalBoxes=commercial?Number(summary.boxes||0):sum('box_count');
     const cards=[['▣','Carros agendados',formatNum(totalBookings),'veículos'],['◈','Peso total',formatWeight(totalWeight),'kg'],['≡','Quantidade de itens',formatNum(totalItems),'itens'],['▤','Quantidade de caixas',formatNum(totalBoxes),'caixas']];
-    const weekdays=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
-    const weekdayCounts=commercial?summary.weekday_counts:weekdays.map((name,index)=>({name,count:active.filter(b=>new Date(b.day+'T12:00:00Z').getUTCDay()===index+1).length}));
-    const maxDay=Math.max(1,...weekdayCounts.map(x=>x.count));
-    const weekdayChart=weekdayCounts.map(x=>'<div class="chart-row"><span>'+x.name+'</span><div class="chart-track"><i style="width:'+(x.count/maxDay*100)+'%"></i></div><strong>'+formatNum(x.count)+'</strong></div>').join('');
+    const dayGroups=new Map();
+    for(const row of dailySupplierRows){let day=dayGroups.get(row.day);if(!day){day={day:row.day,count:0};dayGroups.set(row.day,day)}day.count+=row.supplier_id==null?Number(row.appointment_count||0):1}
+    const dailyCounts=Array.from(dayGroups.values()).sort((a,b)=>a.day.localeCompare(b.day));
+    const maxDay=Math.max(1,...dailyCounts.map(row=>row.count));
+    const dailyChart=dailyCounts.length?dailyCounts.map(row=>'<div class="chart-row"><div class="chart-day-label"><span>'+weekdayName(row.day)+'</span><small>'+dateBR(row.day)+'</small></div><div class="chart-track"><i style="width:'+(row.count/maxDay*100)+'%"></i></div><strong>'+formatNum(row.count)+'</strong>'+(admin?'<button type="button" class="day-detail-button" data-dashboard-day="'+esc(row.day)+'" aria-label="Ver fornecedores agendados em '+dateBR(row.day)+'">+</button>':'')+'</div>').join(''):'<div class="empty-state">Nenhum fornecedor agendado no período.</div>';
     const colors=['#2b7fff','#71a8ff','#96bbff','#c9daf9'];
     const cargo=state.meta.cargoTypes.map((name,index)=>({name,index,count:commercial?Number(summary.cargo_counts.find(x=>x.name===name)?.count||0):active.filter(b=>b.cargo_type===name).length}));
     let degrees=0;
     const slices=cargo.map(x=>{const start=degrees;degrees+=totalBookings?x.count/totalBookings*360:0;return colors[x.index]+' '+start+'deg '+degrees+'deg'}).join(', ');
     const donutStyle=totalBookings?'background:conic-gradient('+slices+')':'background:#e7eef8';
     const legend=cargo.map(x=>'<div class="chart-legend-item"><i style="background:'+colors[x.index]+'"></i><span>'+esc(x.name)+'</span><strong>'+formatNum(x.count)+'</strong></div>').join('');
-    $('#dashBody').innerHTML='<div class="stat-grid">'+cards.map(c=>'<div class="card stat-card"><div class="stat-icon">'+c[0]+'</div><p class="stat-label">'+c[1]+'</p><p class="stat-value">'+c[2]+'<span class="stat-unit">'+c[3]+'</span></p></div>').join('')+'</div>'+
-      '<div class="charts-grid"><div class="card section-card"><div class="section-head"><div><h3>Entregas por dia da semana</h3><p>Quantidade de veículos confirmados no período</p></div></div><div class="weekday-chart">'+weekdayChart+'</div></div>'+
-      '<div class="card section-card"><div class="section-head"><div><h3>Tipos de carga</h3><p>Distribuição dos agendamentos confirmados</p></div></div><div class="cargo-chart"><div class="donut-chart" style="'+donutStyle+'"><div><strong>'+formatNum(totalBookings)+'</strong><small>entregas</small></div></div><div class="chart-legend">'+legend+'</div></div></div></div>'+
-      (admin?'<div class="dashboard-history card"><div><strong>Precisa consultar uma entrega?</strong><span>Pesquise o histórico com data, situação e fornecedor.</span></div><button class="btn" type="button" data-history-open>Abrir histórico →</button></div>':'');
-  }catch(e){if(requestId!==state.dashRequest)return;$('#dashBody').innerHTML='<div class="empty-state">'+esc(e.message)+'</div>';toast(e.message,true)}
-}function supplierField(){
+    $('#dashBody').innerHTML='<div class="stat-grid">'+cards.map(c=>'<div class="card stat-card"><div class="stat-icon">'+c[0]+'</div><p class="stat-label">'+c[1]+'</p><p class="stat-value">'+c[2]+'<span class="stat-unit">'+c[3]+'</span></p></div>').join('')+'</div>'+'<div class="charts-grid"><div class="card section-card"><div class="section-head"><div><h3>Fornecedores por data</h3><p>Fornecedores com agendamentos confirmados no período</p></div></div><div class="weekday-chart daily-supplier-chart '+(admin?'admin-details':'summary-only')+'">'+dailyChart+'</div></div>'+'<div class="card section-card"><div class="section-head"><div><h3>Tipos de carga</h3><p>Distribuição dos agendamentos confirmados</p></div></div><div class="cargo-chart"><div class="donut-chart" style="'+donutStyle+'"><div><strong>'+formatNum(totalBookings)+'</strong><small>entregas</small></div></div><div class="chart-legend">'+legend+'</div></div></div></div>'+(admin?'<div class="dashboard-history card"><div><strong>Precisa consultar uma entrega?</strong><span>Pesquise o histórico com data, situação e fornecedor.</span></div><button class="btn" type="button" data-history-open>Abrir histórico →</button></div>':'');
+  }catch(error){if(requestId!==state.dashRequest)return;$('#dashBody').innerHTML='<div class="empty-state">'+esc(error.message)+'</div>';toast(error.message,true)}
+}
+function openDashboardDayModal(day){
+  const rows=state.dashboardSupplierRows.filter(row=>row.day===day);
+  $('#dashboardDayModalTitle').textContent='Fornecedores agendados — '+weekdayName(day)+' '+dateBR(day);
+  $('#dashboardDayModalContent').innerHTML=rows.length?'<div class="table-wrap"><table class="data-table supplier-day-table"><thead><tr><th>Fornecedor</th><th>Agendamentos</th><th>Horários</th></tr></thead><tbody>'+rows.sort((a,b)=>a.supplier_name.localeCompare(b.supplier_name,'pt-BR')).map(row=>'<tr><td><span class="cell-title">'+esc(row.supplier_name)+'</span></td><td>'+formatNum(row.appointment_count)+'</td><td>'+esc(row.slots)+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state">Nenhum agendamento encontrado para esta data.</div>';
+  $('#dashboardDayModal').classList.remove('hidden');
+  $('#closeDashboardDay').focus();
+}
+function closeDashboardDayModal(){$('#dashboardDayModal').classList.add('hidden')}
+function supplierField(){
   if(state.user.role!=='admin')return '<div class="field"><label>Fornecedor</label><input value="'+esc(state.user.supplier_name)+'" disabled><small>Seu cadastro está vinculado a esta empresa.</small></div>';
   return supplierCombo('supplier');
 }
@@ -224,14 +248,14 @@ function showBookTab(){
       '<div class="empty-state"><span class="empty-icon">⌕</span><strong>Pesquise o histórico de entregas</strong><span>Escolha o período e os filtros para consultar os agendamentos.</span><div style="margin-top:18px"><button class="btn btn-primary" type="button" data-history-open>Abrir filtros</button></div></div>';
     return;
   }
-  $('#bookBody').innerHTML=bookingTable(state.bookings.filter(b=>b.status===state.bookTab));
+  $('#bookBody').innerHTML=bookingTable(state.bookings.filter(b=>b.status===state.bookTab),true,state.user.role==='admin');
 }
 function openHistoryModal(){
   state.bookTab='history';
   if(state.view!=='bookings')navigate('bookings');else showBookTab();
   $('#historyModalContent').innerHTML='<form id="historyForm" class="history-form"><p>Defina os filtros para consultar os agendamentos.</p><div class="field-row"><div class="field"><label for="historyFrom">De</label><input id="historyFrom" name="from" type="date" value="'+state.historyFrom+'" required></div><div class="field"><label for="historyTo">Até</label><input id="historyTo" name="to" type="date" value="'+state.historyTo+'" required></div></div>'+
     (state.user.role==='admin'?'<div class="field"><label for="historySupplier">Fornecedor</label><select id="historySupplier" name="supplier_id">'+supplierOptions(state.historySupplier,true)+'</select></div>':'')+
-    '<div class="field"><label for="historyStatus">Situação</label><select id="historyStatus" name="status"><option value=""'+(!state.historyStatus?' selected':'')+'>Todas</option><option value="active"'+(state.historyStatus==='active'?' selected':'')+'>Confirmados</option><option value="cancelled"'+(state.historyStatus==='cancelled'?' selected':'')+'>Cancelados</option></select></div><div class="history-form-actions"><button type="button" class="btn" id="cancelHistory">Cancelar</button><button type="submit" class="btn btn-primary">Pesquisar histórico</button></div></form>';
+    '<div class="field"><label for="historyStatus">Situação</label><select id="historyStatus" name="status"><option value=""'+(!state.historyStatus?' selected':'')+'>Todas</option><option value="active"'+(state.historyStatus==='active'?' selected':'')+'>Confirmados</option><option value="cancelled"'+(state.historyStatus==='cancelled'?' selected':'')+'>Cancelados</option><option value="no_show"'+(state.historyStatus==='no_show'?' selected':'')+'>No show</option></select></div><div class="history-form-actions"><button type="button" class="btn" id="cancelHistory">Cancelar</button><button type="submit" class="btn btn-primary">Pesquisar histórico</button></div></form>';
   $('#historyModal').classList.remove('hidden');
   $('#historyFrom').focus();
 }
@@ -292,9 +316,9 @@ function renderAdmin(){
   updateDailyLimitPreview();
 }function openTicket(b){
   $('#ticketContent').innerHTML='<div class="ticket"><div class="ticket-header"><small>SENHA PARA ENTREGA DE MERCADORIA</small><div class="ticket-number">'+String(b.id).padStart(3,'0')+'</div></div><p class="ticket-protocol">Apresente esta senha no check-in · Protocolo AGE-'+b.id+'</p>'+
-  [['Data da entrega',dateBR(b.day)],['Horário agendado',b.slot],['Apresentação','05:00 às 05:00'],['Filial','ATACADAO DIA A DIA S.A. · 17.457.404/0023-17'],['Endereço','SETOR POLO DE D J KUBITSCHEK TR 5 CJ 1, S/N - SANTA MARIA - BRASILIA/DF - CEP 72549-710'],['Doca','FLV'],['Fornecedor',b.supplier_name],['Número do pedido',b.order_number||'—'],['Nota fiscal',b.invoice_number||'—'],['Peso da carga',formatWeight(b.weight_kg)+' kg'],['Quantidade de itens',formatNum(b.item_count)],['Quantidade de caixas',formatNum(b.box_count)],['Tipo de veículo',b.vehicle_type],['Tipo de carga',b.cargo_type],['Situação',b.status==='active'?'Confirmado':'Cancelado']].map(x=>'<div class="ticket-row"><span>'+esc(x[0])+'</span><strong>'+esc(x[1])+'</strong></div>').join('')+'<p class="ticket-footer">Apresente esta senha à portaria no dia da entrega.</p></div>';
+  [['Data da entrega',dateBR(b.day)],['Horário agendado',b.slot],['Apresentação','05:00 às 05:00'],['Filial','ATACADAO DIA A DIA S.A. · 17.457.404/0009-69'],['Endereço','ST POLO DE DESENVOLVIMENTO JK TRECHO 2/3, S/N - SANTA MARIA - BRASILIA/DF - CEP 72549-575'],['Doca','FLV'],['Fornecedor',b.supplier_name],['Número do pedido',b.order_number||'—'],['Nota fiscal',b.invoice_number||'—'],['Peso da carga',formatWeight(b.weight_kg)+' kg'],['Quantidade de itens',formatNum(b.item_count)],['Quantidade de caixas',formatNum(b.box_count)],['Tipo de veículo',b.vehicle_type],['Tipo de carga',b.cargo_type],['Situação',b.status==='active'?'Confirmado':b.status==='no_show'?'No show':'Cancelado']].map(x=>'<div class="ticket-row"><span>'+esc(x[0])+'</span><strong>'+esc(x[1])+'</strong></div>').join('')+'<p class="ticket-footer">Apresente esta senha à portaria no dia da entrega.</p></div>';
   $('#printTicket').disabled=b.status!=='active';
-  $('#printTicket').title=b.status==='active'?'Imprimir senha':'Agendamento cancelado';
+  $('#printTicket').title=b.status==='active'?'Imprimir senha':'Senha indisponível para impressão';
   $('#ticketModal').classList.remove('hidden');
 }
 function openBookingCapacityModal(){
@@ -366,6 +390,7 @@ document.addEventListener('click',async e=>{
   const auth=e.target.closest('[data-auth]');if(auth)return showAuth(auth.dataset.auth);
   const view=e.target.closest('[data-view]');if(view)return navigate(view.dataset.view);
   const history=e.target.closest('[data-history-open]');if(history)return openHistoryModal();
+  const dailySummary=e.target.closest('[data-dashboard-day]');if(dailySummary){openDashboardDayModal(dailySummary.dataset.dashboardDay);return}
   const bookingSlot=e.target.closest('[data-booking-slot]');
   if(bookingSlot){state.selectedSlot=bookingSlot.dataset.bookingSlot;renderAvailableSlots();return}
   const tab=e.target.closest('[data-booktab]');
@@ -378,6 +403,8 @@ document.addEventListener('click',async e=>{
   if(ticket){try{openTicket((await api('/api/bookings/'+ticket.dataset.ticket)).booking)}catch(err){toast(err.message,true)}return}
   const cancel=e.target.closest('[data-cancel]');
   if(cancel){if(!confirm('Cancelar este agendamento? A vaga será liberada.'))return;try{await api('/api/bookings/'+cancel.dataset.cancel+'/cancel','POST',{});toast('Agendamento cancelado.');await renderBookings()}catch(err){toast(err.message,true)}return}
+  const markNoShow=e.target.closest('[data-no-show]');
+  if(markNoShow){if(!confirm('Confirmar que o fornecedor não compareceu? O agendamento será marcado como No show.'))return;try{await api('/api/bookings/'+markNoShow.dataset.noShow+'/no-show','POST',{});toast('Agendamento marcado como No show.');await refreshBookings()}catch(err){toast(err.message,true)}return}
   const approve=e.target.closest('[data-approve]');
   if(approve){try{const role=approve.closest('.pending-item').querySelector('[data-approve-role]').value;await api('/api/admin/users/'+approve.dataset.approve+'/approve','POST',{role});toast('Acesso de '+roleNames[role].toLowerCase()+' aprovado.');await Promise.all([refreshPending(),refreshAdminUsers()]);state.meta=await api('/api/meta')}catch(err){toast(err.message,true)}return}
   if(e.target.id==='applyBookings'){
@@ -387,6 +414,7 @@ document.addEventListener('click',async e=>{
   if(e.target.id==='menuBtn'){$('#sidebar').classList.add('open');$('#mobileOverlay').classList.add('show')}
   if(e.target.id==='mobileOverlay'){$('#sidebar').classList.remove('open');$('#mobileOverlay').classList.remove('show')}
   if(e.target.id==='closeTicket'||e.target.id==='ticketModal')$('#ticketModal').classList.add('hidden');
+  if(e.target.id==='closeDashboardDay'||e.target.id==='dashboardDayModal')closeDashboardDayModal();
   if(e.target.id==='closeBookingCapacity'||e.target.id==='bookingCapacityModal'||e.target.closest('[data-capacity-close]'))closeBookingCapacityModal();
   if(e.target.id==='closeHistory'||e.target.id==='cancelHistory'||e.target.id==='historyModal')closeHistoryModal();
   if(e.target.id==='closeUserRole'||e.target.id==='cancelUserRole'||e.target.id==='userRoleModal')closeUserRoleModal();
@@ -398,7 +426,7 @@ document.addEventListener('input',e=>{
   if(['scheduleStart','scheduleEnd','scheduleCapacity'].includes(e.target.id))updateDailyLimitPreview();
 });
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){closeSupplierCombos();closeHistoryModal();closeUserRoleModal();closeBookingCapacityModal();return}
+  if(e.key==='Escape'){closeSupplierCombos();closeHistoryModal();closeUserRoleModal();closeBookingCapacityModal();closeDashboardDayModal();return}
   if(e.key==='Enter'&&e.target.matches('[data-combo-search]')){
     const first=e.target.closest('[data-supplier-combo]').querySelector('[data-combo-option]');
     if(first){e.preventDefault();first.click()}
