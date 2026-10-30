@@ -288,7 +288,7 @@ grant insert(name) on public.suppliers to authenticated;
 grant select on public.profiles to authenticated;
 grant update(status) on public.profiles to authenticated;
 grant select on public.bookings to authenticated;
-grant insert(supplier_id,day,order_number,invoice_number,weight_kg,item_count,box_count,vehicle_type,cargo_type)
+grant insert(supplier_id,day,slot,order_number,invoice_number,weight_kg,item_count,box_count,vehicle_type,cargo_type)
   on public.bookings to authenticated;
 grant update(status) on public.bookings to authenticated;
 grant usage on sequence public.suppliers_id_seq, public.bookings_id_seq to authenticated;
