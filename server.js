@@ -222,21 +222,23 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'GET' && p === '/api/admin/users') {
       if (!requireUser(req,res,true)) return;
-      return json(res,200,{users:db.prepare("SELECT u.id,u.name,u.email,u.status,u.created_at,u.requested_supplier_name,coalesce(s.name,u.requested_supplier_name) AS supplier_name FROM users u LEFT JOIN suppliers s ON s.id=u.supplier_id WHERE u.role='supplier' ORDER BY u.created_at DESC").all()});
+      return json(res,200,{users:db.prepare("SELECT u.id,u.name,u.email,u.role,u.status,u.created_at,u.requested_supplier_name,coalesce(s.name,u.requested_supplier_name) AS supplier_name FROM users u LEFT JOIN suppliers s ON s.id=u.supplier_id ORDER BY u.created_at DESC").all()});
     }
     if (req.method === 'POST' && /^\/api\/admin\/users\/[a-f0-9]+\/approve$/.test(p)) {
       if (!requireUser(req,res,true)) return;
+      const b=await readBody(req), role=String(b.role||'supplier');
+      if (!['admin','supplier'].includes(role)) return fail(res,400,'Escolha fornecedor ou administrador.');
       const id=p.split('/')[4];
       const pending=db.prepare("SELECT * FROM users WHERE id=? AND status='pending' AND role='supplier'").get(id);
       if (!pending) return fail(res,404,'Cadastro pendente não encontrado.');
       db.exec('BEGIN IMMEDIATE');
       try {
-        let supplierId=pending.supplier_id;
-        if (!supplierId) {
+        let supplierId=role==='supplier'?pending.supplier_id:null;
+        if (role==='supplier'&&!supplierId) {
           db.prepare('INSERT OR IGNORE INTO suppliers(name) VALUES (?)').run(pending.requested_supplier_name);
           supplierId=db.prepare('SELECT id FROM suppliers WHERE name=? COLLATE NOCASE').get(pending.requested_supplier_name).id;
         }
-        db.prepare("UPDATE users SET status='active',supplier_id=? WHERE id=?").run(supplierId,id);
+        db.prepare("UPDATE users SET status='active',role=?,supplier_id=?,requested_supplier_name=? WHERE id=?").run(role,supplierId,role==='supplier'?pending.requested_supplier_name:null,id);
         db.exec('COMMIT');
       } catch (e) {db.exec('ROLLBACK');throw e}
       return json(res,200,{ok:true});

@@ -161,8 +161,14 @@ h1,h2,h3,.stat-value,.side-brand strong,.ticket-number{font-family:Inter,Arial,s
 .requested-tag{color:#2b7fff!important;font-weight:700}
 .users-card,.my-bookings{margin-top:22px}
 .user-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.approval-actions{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap}
+.approval-actions select{min-height:42px;padding:9px 32px 9px 12px;border:1px solid #d7e2f1;border-radius:9px;background:#fff;color:#233b5e;font:inherit;font-size:12px;font-weight:700}
+.approval-actions select:focus{outline:3px solid #dceaff;border-color:#2b7fff}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.badge.role-admin{background:#f1e9ff;color:#6740a5}
+.badge.role-supplier{background:#eaf2ff;color:#2465b9}
 .user-item>div:first-child{min-width:0;overflow-wrap:anywhere}
 .my-bookings{max-width:880px}
 @media(max-width:1000px){.auth-intro{padding:35px}.auth-hero-copy{margin-top:65px}.auth-intro h1{font-size:48px}.auth-card{padding:25px}.auth-inner{padding:37px 30px}}
-@media(max-width:720px){.auth-screen{display:block}.auth-intro{min-height:280px;padding:28px 24px;background-position:center 58%}.auth-intro .hero-logo{display:block;width:138px;height:44px;padding:7px 11px}.auth-hero-copy{margin-top:30px}.auth-hero-copy .eyebrow{font-size:10px;margin-bottom:23px}.auth-hero-copy .eyebrow:after{bottom:-9px}.auth-intro h1{font-size:38px;line-height:1.03;margin-bottom:9px}.intro-copy{font-size:12px;max-width:360px}.intro-bottom,.auth-mobile-brand{display:none}.auth-card{padding:20px 16px 32px}.auth-inner{width:100%;padding:28px 22px;box-shadow:0 10px 35px rgba(31,78,143,.1)}.auth-inner h2{font-size:29px}.user-item{align-items:flex-start}.user-actions{flex-direction:column;align-items:flex-end;gap:6px}}
+@media(max-width:720px){.auth-screen{display:block}.auth-intro{min-height:280px;padding:28px 24px;background-position:center 58%}.auth-intro .hero-logo{display:block;width:138px;height:44px;padding:7px 11px}.auth-hero-copy{margin-top:30px}.auth-hero-copy .eyebrow{font-size:10px;margin-bottom:23px}.auth-hero-copy .eyebrow:after{bottom:-9px}.auth-intro h1{font-size:38px;line-height:1.03;margin-bottom:9px}.intro-copy{font-size:12px;max-width:360px}.intro-bottom,.auth-mobile-brand{display:none}.auth-card{padding:20px 16px 32px}.auth-inner{width:100%;padding:28px 22px;box-shadow:0 10px 35px rgba(31,78,143,.1)}.auth-inner h2{font-size:29px}.user-item{align-items:flex-start}.user-actions{flex-direction:column;align-items:flex-end;gap:6px}.approval-actions{width:100%;justify-content:flex-start}.approval-actions select{flex:1}}
 @media print{.auth-intro,.auth-card{display:none!important}}

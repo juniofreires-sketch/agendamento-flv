@@ -84,14 +84,14 @@ function showApp(){
   $('#todayLabel').textContent=dateBR(today());
   document.querySelectorAll('.admin-only').forEach(el=>el.classList.toggle('hidden',state.user.role!=='admin'));
   document.querySelectorAll('.nav-link[data-view]').forEach(el=>{
-    el.classList.toggle('hidden',state.user.role!=='admin' && el.dataset.view!=='schedule');
+    el.classList.toggle('hidden',state.user.role!=='admin' && !['schedule','bookings'].includes(el.dataset.view));
   });
   if(!state.dashFrom){state.dashFrom=firstOfMonth(today());state.dashTo=lastOfMonth(today());state.bookFrom=dateOffset(today(),-90);state.bookTo=dateOffset(today(),90);state.historyFrom=dateOffset(today(),-365);state.historyTo=today();state.slotDay=nextOpenDay(state.meta.current_time > '10:00' ? dateOffset(today(),1) : today())}
-  if(state.user.role!=='admin')state.view='schedule';
+  if(state.user.role!=='admin'&&!['schedule','bookings'].includes(state.view))state.view='schedule';
   navigate(state.view);
 }
 function navigate(view){
-  if(state.user.role!=='admin'&&view!=='schedule')view='schedule';
+  if(state.user.role!=='admin'&&!['schedule','bookings'].includes(view))view='schedule';
   state.view=view;
   const titles={dashboard:'Dashboard',schedule:'Novo agendamento',bookings:'Agendamentos',users:'Usuários',admin:'Administração'};
   $('#pageTitle').textContent=titles[view];$('#crumb').textContent=titles[view].toUpperCase();
@@ -148,8 +148,7 @@ function renderSchedule(){
   '<div class="field-row"><div class="field"><label for="boxes">Quantidade de caixas *</label><input id="boxes" name="box_count" type="number" min="0" step="1" placeholder="Ex: 200" required></div><div class="field"><label for="vehicle">Tipo de veículo *</label><select id="vehicle" name="vehicle_type" required>'+optionList(state.meta.vehicleTypes)+'</select></div></div>'+
   '<div class="field"><label for="cargo">Tipo de carga *</label><select id="cargo" name="cargo_type" required>'+optionList(state.meta.cargoTypes)+'</select></div>'+
   '<div class="form-footer"><p>Após confirmar, a senha estará disponível para impressão e apresentação na portaria.</p><button type="submit" class="btn btn-primary">Confirmar agendamento →</button></div></form></div></div>'+
-  (state.user.role==='supplier'?'<div class="card section-card my-bookings"><div class="section-head"><div><h3>Meus agendamentos</h3><p>Consulte suas senhas e cancele uma entrega quando precisar.</p></div></div><div class="tabs"><button type="button" data-supplier-booktab="active">Confirmados</button><button type="button" data-supplier-booktab="cancelled">Cancelados</button></div><div id="supplierBookBody" class="empty-state">Carregando seus agendamentos...</div></div>':'');
-  if(state.user.role==='supplier')refreshSupplierBookings();
+  '';
 }
 async function refreshSupplierBookings(){
   try{
@@ -198,9 +197,9 @@ function openHistoryModal(){
 }
 function closeHistoryModal(){$('#historyModal').classList.add('hidden')}
 async function renderUsers(){
-  $('#viewContent').innerHTML=pageHead('GESTÃO DE ACESSOS','Usuários','Avalie solicitações e gerencie as contas dos fornecedores.')+
-  '<div class="card section-card"><div class="section-head"><div><h3>Aguardando aprovação</h3><p>Confira o vínculo do solicitante antes de liberar o acesso.</p></div></div><div id="pendingBody" class="empty-state">Carregando...</div></div>'+
-  '<div class="card section-card users-card"><div class="section-head"><div><h3>Todos os usuários fornecedores</h3><p>Contas ativas e pendentes. A exclusão mantém o histórico das entregas.</p></div></div><div id="adminUsersBody" class="empty-state">Carregando...</div></div>';
+  $('#viewContent').innerHTML=pageHead('GESTÃO DE ACESSOS','Usuários','Avalie solicitações e gerencie os acessos do portal.')+
+  '<div class="card section-card"><div class="section-head"><div><h3>Aguardando aprovação</h3><p>Escolha se cada conta terá acesso de fornecedor ou administrador.</p></div></div><div id="pendingBody" class="empty-state">Carregando...</div></div>'+
+  '<div class="card section-card users-card"><div class="section-head"><div><h3>Usuários do portal</h3><p>Contas ativas e pendentes. A exclusão de fornecedores mantém o histórico das entregas.</p></div></div><div id="adminUsersBody" class="empty-state">Carregando...</div></div>';
   await Promise.all([refreshPending(),refreshAdminUsers()]);
 }
 async function refreshPending(){
@@ -208,7 +207,7 @@ async function refreshPending(){
     const rows=(await api('/api/admin/pending')).users;
     const target=$('#pendingBody');if(!target)return;
     target.className='';
-    target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name)+'</small>'+(u.requested_supplier_name?'<small class="requested-tag">Fornecedor digitado no cadastro</small>':'')+'</div><button class="btn btn-primary" data-approve="'+esc(u.id)+'">Aprovar</button></div>').join(''):'<div class="empty-state"><span class="empty-icon">✓</span><strong>Nenhuma aprovação pendente</strong><span>Novos cadastros aparecerão aqui.</span></div>';
+    target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name||'Vínculo administrativo')+'</small>'+(u.requested_supplier_name?'<small class="requested-tag">Fornecedor digitado no cadastro</small>':'')+'</div><div class="approval-actions"><label class="sr-only" for="approveRole-'+esc(u.id)+'">Tipo de acesso</label><select id="approveRole-'+esc(u.id)+'" data-approve-role><option value="supplier">Fornecedor</option><option value="admin">Administrador</option></select><button class="btn btn-primary" data-approve="'+esc(u.id)+'">Aprovar</button></div></div>').join(''):'<div class="empty-state"><span class="empty-icon">✓</span><strong>Nenhuma aprovação pendente</strong><span>Novos cadastros aparecerão aqui.</span></div>';
   }catch(e){const target=$('#pendingBody');if(target)target.textContent=e.message;toast(e.message,true)}
 }
 async function refreshAdminUsers(){
@@ -216,7 +215,7 @@ async function refreshAdminUsers(){
     const rows=(await api('/api/admin/users')).users;
     const target=$('#adminUsersBody');if(!target)return;
     target.className='';
-    target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item user-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name)+'</small></div><div class="user-actions"><span class="badge '+(u.status==='active'?'active':'cancelled')+'">'+(u.status==='active'?'Ativo':'Pendente')+'</span><button class="btn btn-danger" type="button" data-delete-user="'+esc(u.id)+'">Excluir</button></div></div>').join(''):'<div class="empty-state"><strong>Nenhum fornecedor cadastrado</strong></div>';
+    target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item user-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name||'Sem fornecedor vinculado')+'</small></div><div class="user-actions"><span class="badge '+(u.role==='admin'?'role-admin':'role-supplier')+'">'+(u.role==='admin'?'Administrador':'Fornecedor')+'</span><span class="badge '+(u.status==='active'?'active':'cancelled')+'">'+(u.status==='active'?'Ativo':'Pendente')+'</span>'+(u.role==='supplier'?'<button class="btn btn-danger" type="button" data-delete-user="'+esc(u.id)+'">Excluir</button>':'')+'</div></div>').join(''):'<div class="empty-state"><strong>Nenhum usuário cadastrado</strong></div>';
   }catch(e){const target=$('#adminUsersBody');if(target)target.textContent=e.message;toast(e.message,true)}
 }
 function renderAdmin(){
@@ -301,9 +300,9 @@ document.addEventListener('click',async e=>{
   const ticket=e.target.closest('[data-ticket]');
   if(ticket){try{openTicket((await api('/api/bookings/'+ticket.dataset.ticket)).booking)}catch(err){toast(err.message,true)}return}
   const cancel=e.target.closest('[data-cancel]');
-  if(cancel){if(!confirm('Cancelar este agendamento? A vaga será liberada.'))return;try{await api('/api/bookings/'+cancel.dataset.cancel+'/cancel','POST',{});toast('Agendamento cancelado.');if(state.user.role==='supplier')renderSchedule();else await renderBookings()}catch(err){toast(err.message,true)}return}
+  if(cancel){if(!confirm('Cancelar este agendamento? A vaga será liberada.'))return;try{await api('/api/bookings/'+cancel.dataset.cancel+'/cancel','POST',{});toast('Agendamento cancelado.');await renderBookings()}catch(err){toast(err.message,true)}return}
   const approve=e.target.closest('[data-approve]');
-  if(approve){try{await api('/api/admin/users/'+approve.dataset.approve+'/approve','POST',{});toast('Acesso aprovado.');await Promise.all([refreshPending(),refreshAdminUsers()]);state.meta=await api('/api/meta')}catch(err){toast(err.message,true)}return}
+  if(approve){try{const role=approve.closest('.pending-item').querySelector('[data-approve-role]').value;await api('/api/admin/users/'+approve.dataset.approve+'/approve','POST',{role});toast(role==='admin'?'Acesso de administrador aprovado.':'Acesso de fornecedor aprovado.');await Promise.all([refreshPending(),refreshAdminUsers()]);state.meta=await api('/api/meta')}catch(err){toast(err.message,true)}return}
   if(e.target.id==='applyDash'){
     state.dashFrom=$('#dashFrom').value;state.dashTo=$('#dashTo').value;state.dashSupplier=$('#dashSupplier')?.value||'';
     return renderDashboard();

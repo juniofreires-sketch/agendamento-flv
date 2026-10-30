@@ -150,16 +150,15 @@ export async function api(path,method='GET',body){
   }
   if(p==='/api/admin/users'&&method==='GET'){
     const {data,error}=await supabase.from('profiles')
-      .select('id,name,email,status,created_at,requested_supplier_name,suppliers(name)')
-      .eq('role','supplier').order('created_at',{ascending:false}).limit(2000);
+      .select('id,name,email,role,status,created_at,requested_supplier_name,suppliers(name)')
+      .order('created_at',{ascending:false}).limit(2000);
     fail(error);
     return {users:(data||[]).map(row=>({...row,supplier_name:row.suppliers?.name||row.requested_supplier_name||''}))};
   }
   const approve=/^\/api\/admin\/users\/([a-f0-9-]+)\/approve$/.exec(p);
   if(approve&&method==='POST'){
-    const {data,error}=await supabase.from('profiles').update({status:'active'})
-      .eq('id',approve[1]).eq('status','pending').eq('role','supplier').select('id').single();
-    fail(error);if(!data)throw new Error('Cadastro pendente não encontrado.');
+    const {error}=await supabase.rpc('admin_approve_user',{p_user_id:approve[1],p_role:body?.role||'supplier'});
+    fail(error);
     return {ok:true};
   }
   const remove=/^\/api\/admin\/users\/([a-f0-9-]+)\/delete$/.exec(p);
