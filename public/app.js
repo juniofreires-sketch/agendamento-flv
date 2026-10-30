@@ -51,6 +51,7 @@ function openSupplierCombo(combo){
 const eyeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
 const lockIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>';
 const mailIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg>';
+const googleIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.22-.2-1.75H12v3.77h5.5a4.73 4.73 0 0 1-2.05 3.1v2.52h3.32c1.94-1.79 2.83-4.43 2.83-7.64Z"/><path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.61-2.44l-3.32-2.52c-.92.62-2.09.99-3.29.99-2.53 0-4.68-1.71-5.45-4.01H3.11v2.58A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.55 14.02A6.02 6.02 0 0 1 6.23 12c0-.7.12-1.39.32-2.02V7.4H3.11A10 10 0 0 0 2 12c0 1.61.39 3.13 1.11 4.6l3.44-2.58Z"/><path fill="#EA4335" d="M12 5.97c1.44 0 2.73.5 3.75 1.47l2.95-2.95A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.89 5.4l3.44 2.58C7.32 7.68 9.47 5.97 12 5.97Z"/></svg>';
 function passwordField(id,name,autocomplete){
   return '<div class="field"><label for="'+id+'">Senha</label><div class="input-icon-wrap">'+lockIcon+'<input id="'+id+'" name="'+name+'" type="password" minlength="6" required autocomplete="'+autocomplete+'" placeholder="Digite sua senha"><button class="password-toggle" type="button" data-password-toggle="'+id+'" aria-label="Mostrar senha" aria-pressed="false">'+eyeIcon+'</button></div>'+(autocomplete==='new-password'?'<small>Mínimo de 6 caracteres.</small>':'')+'</div>';
 }
@@ -63,7 +64,9 @@ function showAuth(mode='login'){
   } else {
     form='<p class="eyebrow">BEM-VINDO AO PORTAL</p><h2>'+(mode==='login'?'Acesse sua conta':'Crie sua conta')+'</h2><p class="subtext">'+(mode==='login'?'Entre para acompanhar seus agendamentos e emitir a senha de entrega.':'Escolha sua empresa ou digite o nome dela. O acesso será liberado após aprovação.')+'</p><div class="auth-tabs"><button type="button" data-auth="login" class="'+(mode==='login'?'active':'')+'">Entrar</button><button type="button" data-auth="register" class="'+(mode==='register'?'active':'')+'">Cadastrar</button></div>';
     if(mode==='login'){
-      form+='<form id="loginForm"><div class="field"><label for="loginEmail">Email</label><div class="input-icon-wrap">'+mailIcon+'<input id="loginEmail" name="email" type="email" placeholder="seu@email.com" required autocomplete="email"></div></div>'+passwordField('loginPassword','password','current-password')+'<button class="btn btn-primary btn-full auth-submit" type="submit">Entrar no portal <span aria-hidden="true">→</span></button></form><p class="auth-note">Seu acesso mostra apenas os dados do seu fornecedor.</p>';
+      form+='<form id="loginForm"><div class="field"><label for="loginEmail">Email</label><div class="input-icon-wrap">'+mailIcon+'<input id="loginEmail" name="email" type="email" placeholder="seu@email.com" required autocomplete="email"></div></div>'+passwordField('loginPassword','password','current-password')+'<button class="btn btn-primary btn-full auth-submit" type="submit">Entrar no portal <span aria-hidden="true">→</span></button></form>'+
+        (state.meta.googleEnabled?'<div class="social-divider"><span>ou</span></div><button class="btn btn-full google-button" type="button" data-google-login>'+googleIcon+' Entrar com Google</button><p class="social-note">Use o mesmo email de uma conta já aprovada.</p>':'')+
+        '<p class="auth-note">Seu acesso mostra apenas os dados do seu fornecedor.</p>';
     } else {
       form+='<form id="registerForm"><div class="field"><label for="regName">Seu nome</label><input id="regName" name="name" required autocomplete="name"></div><div class="field"><label for="regEmail">Email de acesso</label><input id="regEmail" name="email" type="email" required autocomplete="email"></div><div id="regSupplierSelect">'+supplierCombo('regSupplier')+'</div><button type="button" class="text-link supplier-mode-toggle" id="toggleNewSupplier">Não encontrou sua empresa? Digitar nome</button><div id="regSupplierTyped" class="field hidden"><label for="regSupplierName">Nome do fornecedor *</label><input id="regSupplierName" name="supplier_name" minlength="3" maxlength="160" placeholder="Digite a razão social" autocomplete="organization"><small>O administrador conferirá esta empresa antes de liberar o acesso.</small></div>'+passwordField('regPassword','password','new-password')+'<button class="btn btn-primary btn-full auth-submit" type="submit">Solicitar cadastro <span aria-hidden="true">→</span></button></form><p class="auth-note">A equipe avaliará o cadastro e liberará o acesso após aprovação.</p>';
     }
@@ -238,6 +241,13 @@ document.addEventListener('click',async e=>{
     passwordToggle.classList.toggle('visible',visible);
     return;
   }
+  const googleLogin=e.target.closest('[data-google-login]');
+  if(googleLogin){
+    googleLogin.disabled=true;
+    try{await api('/api/auth/google','POST',{})}
+    catch(err){googleLogin.disabled=false;toast(err.message,true)}
+    return;
+  }
   if(e.target.id==='toggleNewSupplier'){
     const typed=$('#regSupplierTyped');
     const selected=$('#regSupplierSelect');
@@ -379,4 +389,4 @@ document.addEventListener('submit',async e=>{
   }catch(err){toast(err.message,true)}
   finally{if(form.isConnected)submitButton(form,false)}
 });
-(async()=>{try{state.meta=await api('/api/meta');state.user=(await api('/api/me')).user;if(state.user)showApp();else showAuth()}catch(e){$('#authContent').innerHTML='<div class="auth-inner"><h2>Não foi possível carregar o portal</h2><p class="subtext">'+esc(e.message)+'</p><button class="btn" onclick="location.reload()">Tentar novamente</button></div>'}})();
+(async()=>{try{state.meta=await api('/api/meta');const session=await api('/api/me');state.user=session.user;if(state.user)showApp();else if(session.pending)showRegistrationReceived('Seu cadastro está aguardando a aprovação da equipe.');else showAuth()}catch(e){$('#authContent').innerHTML='<div class="auth-inner"><h2>Não foi possível carregar o portal</h2><p class="subtext">'+esc(e.message)+'</p><button class="btn" onclick="location.reload()">Tentar novamente</button></div>'}})();

@@ -52,14 +52,27 @@ export async function api(path,method='GET',body){
   const url=new URL(path,location.origin);
   const p=url.pathname;
   if(p==='/api/meta'&&method==='GET'){
-    const {data,error}=await supabase.from('suppliers').select('id,name').order('name').limit(1000);
+    const [{data,error},settings]=await Promise.all([
+      supabase.from('suppliers').select('id,name').order('name').limit(1000),
+      fetch(__SUPABASE_URL__+'/auth/v1/settings',{headers:{apikey:__SUPABASE_PUBLISHABLE_KEY__}})
+        .then(response=>response.ok?response.json():null).catch(()=>null)
+    ]);
     fail(error);
     const now=localParts();
-    return {suppliers:data||[],vehicleTypes,cargoTypes,bootstrap:false,today:now.day,current_time:now.time};
+    return {suppliers:data||[],vehicleTypes,cargoTypes,bootstrap:false,googleEnabled:settings?.external?.google===true,today:now.day,current_time:now.time};
   }
   if(p==='/api/me'&&method==='GET'){
     const user=await signedInProfile();
+    if(user?.status==='pending'){
+      await supabase.auth.signOut();
+      return {user:null,pending:true};
+    }
     return {user:user?.status==='active'?user:null};
+  }
+  if(p==='/api/auth/google'&&method==='POST'){
+    const {error}=await supabase.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin}});
+    fail(error);
+    return {ok:true};
   }
   if(p==='/api/register'&&method==='POST'){
     const email=String(body.email||'').trim().toLowerCase();

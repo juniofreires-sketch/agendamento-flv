@@ -37,7 +37,15 @@ O build cria `dist/`, publicado segundo `vercel.json`. Antes de publicar em outr
 
 O administrador inicial foi criado por um processo administrativo controlado para `junior.matheus64@gmail.com`. O cadastro público sempre exige um fornecedor e cria uma conta pendente. Somente o administrador pode aprová-la; até então, o fornecedor não acessa o portal.
 
-A senha inicial desse administrador está em `data/admin-initial-password.txt` somente neste computador e não foi enviada ao Git. Use esse conteúdo no portal publicado; a senha da conta Gmail não é a senha do portal.
+A senha do administrador está em `data/admin-initial-password.txt` somente neste computador e não foi enviada ao Git. Use esse conteúdo no portal publicado; a senha da conta Gmail não é a senha do portal.
+
+## Entrada com Google
+
+O botão Google aparece automaticamente quando o provedor Google estiver ativo no Supabase. Ele permite entrar usando o mesmo email de uma conta já aprovada; uma conta nova precisa primeiro ser cadastrada e aprovada pelo fluxo normal. O login pelo Google não concede papel de administrador nem acesso a outros fornecedores.
+
+Para ativar no projeto Supabase deste portal, crie no [Google Auth Platform](https://console.cloud.google.com/auth/clients) um cliente OAuth do tipo **Aplicativo da Web**. Configure a origem `https://agendamento-flv-nu.vercel.app` e o URI de redirecionamento `https://vtnpnosxahubqfsinlko.supabase.co/auth/v1/callback`. Configure a tela de consentimento para público externo. Em seguida, informe o ID e o segredo do cliente na página **Authentication → Providers → Google** do projeto `vtnpnosxahubqfsinlko`. Mantenha o segredo fora do Git e do navegador.
+
+No modo **Testing**, o Google limita o acesso aos usuários de teste autorizados; para todos os fornecedores, publique a tela de consentimento em **In production**. O portal consulta a configuração do Supabase a cada carregamento, então o botão passa a aparecer sem novo deploy depois da ativação.
 
 ## Ambiente de estudo publicado
 

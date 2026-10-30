@@ -150,6 +150,12 @@ h1,h2,h3,.stat-value,.side-brand strong,.ticket-number{font-family:Inter,Arial,s
 .password-toggle.visible:after{content:'';position:absolute;width:25px;height:2px;background:currentColor;transform:rotate(-40deg)}
 .auth-submit{margin-top:5px;min-height:51px;border-radius:8px;background:#1475f5;border-color:#1475f5;font-size:15px;box-shadow:0 9px 18px rgba(28,108,222,.15)}
 .auth-submit:hover{background:#0867e7;border-color:#0867e7}
+.social-divider{display:flex;align-items:center;gap:14px;margin:18px 0 15px;color:#8ea1bd;font-size:12px}
+.social-divider:before,.social-divider:after{content:'';height:1px;background:#dbe5f2;flex:1}
+.google-button{min-height:47px;border-color:#cbdcf3;color:#233b5e;background:#fff;font-size:14px;font-weight:700;box-shadow:none}
+.google-button:hover{background:#f6f9ff;border-color:#adc6eb}
+.google-button svg{width:19px;height:19px;flex:none}
+.social-note{text-align:center;color:#7a8da8;font-size:11px;margin:9px 0 0}
 .auth-note{font-size:12px;color:#8194b0;margin-top:18px}
 .supplier-mode-toggle{padding:0 0 13px;text-align:left;font-size:12px}
 .requested-tag{color:#2b7fff!important;font-weight:700}

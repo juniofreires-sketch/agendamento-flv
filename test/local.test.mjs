@@ -12,6 +12,7 @@ async function call(method,url,body,cookie=''){
 }
 const meta=await call('GET','/api/meta');
 assert.equal(meta.status,200);
+assert.equal(meta.data.googleEnabled,false);
 assert.equal(meta.data.suppliers.length,409);
 assert.equal(meta.data.bootstrap,true);
 const [first,second]=meta.data.suppliers;

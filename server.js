@@ -135,7 +135,7 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'GET' && p === '/api/meta') {
       const suppliers = db.prepare('SELECT id,name FROM suppliers ORDER BY name').all().map(supplierRow);
-      return json(res,200,{suppliers,vehicleTypes,cargoTypes,bootstrap:db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='admin'").get().n === 0,today:nowParts().day,current_time:nowParts().time});
+      return json(res,200,{suppliers,vehicleTypes,cargoTypes,bootstrap:db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='admin'").get().n === 0,googleEnabled:false,today:nowParts().day,current_time:nowParts().time});
     }
     if (req.method === 'POST' && p === '/api/bootstrap') {
       if (db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='admin'").get().n) return fail(res,403,'Administrador já configurado.');
