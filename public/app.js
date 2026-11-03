@@ -175,7 +175,10 @@ function openDashboardDayModal(day){
 }
 function closeDashboardDayModal(){$('#dashboardDayModal').classList.add('hidden')}
 function supplierField(){
-  if(state.user.role!=='admin')return '<div class="field"><label>Fornecedor</label><input value="'+esc(state.user.supplier_name)+'" disabled><small>Seu cadastro está vinculado a esta empresa.</small></div>';
+  if(state.user.role!=='admin'){
+    const linked=state.user.supplier_id&&state.user.supplier_name;
+    return '<div class="field"><label for="linkedSupplier">Fornecedor vinculado</label><input id="linkedSupplier" value="'+esc(linked?state.user.supplier_name:'Fornecedor não vinculado')+'" readonly aria-readonly="true"><small>'+(linked?'Este agendamento será registrado somente para o fornecedor vinculado ao seu cadastro.':'Seu usuário está sem fornecedor vinculado. Peça ao administrador para corrigir o cadastro antes de agendar.')+'</small></div>';
+  }
   return supplierCombo('supplier');
 }
 function renderSchedule(){
@@ -188,7 +191,7 @@ function renderSchedule(){
   '<div class="form-divider"></div><div class="form-section-title"><span>2</span> Dados da carga</div>'+
   '<div class="field-row"><div class="field"><label for="orderNumber">Número do pedido</label><input id="orderNumber" name="order_number" maxlength="80" placeholder="Ex: 12345"></div><div class="field"><label for="invoiceNumber">Nota fiscal</label><input id="invoiceNumber" name="invoice_number" maxlength="80" placeholder="Ex: 98765"></div></div>'+
   '<div class="field-row"><div class="field"><label for="weight">Peso da carga (kg) *</label><input id="weight" name="weight_kg" type="number" min="0.01" step="0.01" placeholder="Ex: 1250" required></div><div class="field"><label for="items">Quantidade de itens *</label><input id="items" name="item_count" type="number" min="0" step="1" placeholder="Ex: 80" required></div></div>'+
-  '<div class="field-row"><div class="field"><label for="boxes">Quantidade de caixas *</label><input id="boxes" name="box_count" type="number" min="0" step="1" placeholder="Ex: 200" required></div><div class="field"><label for="vehicle">Tipo de veículo *</label><select id="vehicle" name="vehicle_type" required>'+optionList(state.meta.vehicleTypes)+'</select></div></div>'+
+  '<div class="field-row"><div class="field"><label for="boxes">Quantidade de caixas</label><input id="boxes" name="box_count" type="number" min="0" step="1" placeholder="Ex: 200"><small>Opcional. Se não houver caixas, deixe em branco.</small></div><div class="field"><label for="vehicle">Tipo de veículo *</label><select id="vehicle" name="vehicle_type" required>'+optionList(state.meta.vehicleTypes)+'</select></div></div>'+
   '<div class="field"><label for="cargo">Tipo de carga *</label><select id="cargo" name="cargo_type" required>'+optionList(state.meta.cargoTypes)+'</select></div>'+
   '<div class="form-footer"><p>Após confirmar, a senha estará disponível para impressão e apresentação na portaria.</p><button type="submit" class="btn btn-primary">Confirmar agendamento →</button></div></form></div></div>'+
   '';
@@ -481,11 +484,12 @@ document.addEventListener('submit',async e=>{
     }
     if(form.id==='bookingForm'){
       if(state.user.role==='admin'&&!values.supplier_id)throw new Error('Selecione um fornecedor.');
+      if(state.user.role==='supplier'&&(!state.user.supplier_id||!state.user.supplier_name))throw new Error('Seu usuário está sem fornecedor vinculado. Peça ao administrador para corrigir o cadastro antes de agendar.');
       if(!values.day||values.day<firstAvailableDeliveryDay()||isSunday(values.day))throw new Error('Escolha uma data a partir do próximo dia disponível. Domingos não recebem agendamentos.');
       if(!values.slot||!state.availableSlots.includes(values.slot))throw new Error('Selecione um horário disponível antes de confirmar.');
       values.weight_kg=Number(values.weight_kg);
       values.item_count=Number(values.item_count);
-      values.box_count=Number(values.box_count);
+      values.box_count=values.box_count===''||values.box_count==null?0:Number(values.box_count);
       const r=await api('/api/bookings','POST',values);
       toast('Agendamento confirmado para '+r.booking.slot+'.');
       openTicket(r.booking);

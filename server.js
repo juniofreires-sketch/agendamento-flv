@@ -246,8 +246,10 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'GET' && p === '/api/me') return json(res,200,{user:currentUser(req)});
     if (req.method === 'POST' && p === '/api/bookings') {
       const user = requireUser(req,res); if (!user) return;
+      if (!['admin','supplier'].includes(user.role)) return fail(res,403,'Este perfil não pode criar agendamentos.');
+      if (user.role === 'supplier' && !user.supplier_id) return fail(res,403,'Seu usuário está sem fornecedor vinculado. Peça ao administrador para corrigir o cadastro antes de agendar.');
       const b = await readBody(req);
-      const day = String(b.day||''), weight = Number(b.weight_kg), items = Number(b.item_count), boxes = Number(b.box_count);
+      const day = String(b.day||''), weight = Number(b.weight_kg), items = Number(b.item_count), boxes = b.box_count===''||b.box_count==null?0:Number(b.box_count);
       const settings = getSchedulingSettings();
       const supplierId = user.role === 'admin' ? Number(b.supplier_id) : user.supplier_id;
       if (!db.prepare('SELECT id FROM suppliers WHERE id=?').get(supplierId)) return fail(res,400,'Selecione um fornecedor válido.');
@@ -272,6 +274,7 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'GET' && p === '/api/bookings') {
       const user = requireUser(req,res); if (!user) return;
       if (user.role === 'commercial') return fail(res,403,'O perfil comercial não tem acesso à lista de agendamentos.');
+      if (user.role === 'supplier' && !user.supplier_id) return fail(res,403,'Seu usuário está sem fornecedor vinculado. Peça ao administrador para corrigir o cadastro.');
       const from = url.searchParams.get('from') || '0000-01-01', to = url.searchParams.get('to') || '9999-12-31';
       if (!isValidDay(from) || !isValidDay(to) || from > to) return fail(res,400,'Período inválido.');
       const supplier = user.role === 'admin' ? Number(url.searchParams.get('supplier_id')||0) : user.supplier_id;

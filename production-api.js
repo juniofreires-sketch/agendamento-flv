@@ -148,15 +148,20 @@ export async function api(path,method='GET',body){
     return {bookings:(data||[]).map(bookingRow)};
   }
   if(p==='/api/bookings'&&method==='POST'){
+    const profile=await signedInProfile();
+    if(!profile||profile.status!=='active'||!['admin','supplier'].includes(profile.role))
+      throw new Error('Este perfil não pode criar agendamentos.');
+    if(profile.role==='supplier'&&!profile.supplier_id)
+      throw new Error('Seu usuário está sem fornecedor vinculado. Peça ao administrador para corrigir o cadastro antes de agendar.');
     const payload={
-      supplier_id:body.supplier_id ? Number(body.supplier_id) : null,
+      supplier_id:profile.role==='admin'?(body.supplier_id?Number(body.supplier_id):null):profile.supplier_id,
       day:body.day,
       slot:body.slot,
       order_number:body.order_number||null,
       invoice_number:body.invoice_number||null,
       weight_kg:Number(body.weight_kg),
       item_count:Number(body.item_count),
-      box_count:Number(body.box_count),
+      box_count:body.box_count===''||body.box_count==null?0:Number(body.box_count),
       vehicle_type:body.vehicle_type,
       cargo_type:body.cargo_type
     };
