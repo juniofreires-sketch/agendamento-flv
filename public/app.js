@@ -8,7 +8,46 @@ const api = async (url, method='GET', body) => {
   if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a operação.');
   return data;
 };
-const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardSupplierRows:[],bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],availabilityRequest:0,bookings:[],pending:[],adminUsers:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0};
+const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardSupplierRows:[],bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],availabilityRequest:0,bookings:[],pending:[],adminUsers:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
+let notificationTimer;
+const notificationStorageKey = id => 'flv-notifications-seen:'+id;
+function renderNotifications(){
+  const unread=state.pendingNotifications.filter(u=>!state.notificationSeen.includes(String(u.id)));
+  const count=$('#notificationCount');
+  count.textContent=unread.length>99?'99+':String(unread.length);
+  count.classList.toggle('hidden',unread.length===0);
+  $('#notificationBell').setAttribute('aria-label',unread.length?unread.length+' cadastros novos aguardando aprovação':'Nenhuma nova notificação');
+  $('#notificationSummary').textContent=unread.length?unread.length+' novo(s)':'Nenhum novo';
+  $('#notificationList').innerHTML=unread.length?unread.map(u=>'<button type="button" class="notification-item" data-notification-user="'+esc(u.id)+'"><strong>'+esc(u.name)+'</strong><small>'+esc(u.supplier_name||'Fornecedor não informado')+'</small><span>Ver solicitação</span></button>').join(''):'<p class="notification-empty">Nenhum novo cadastro. As solicitações pendentes continuam na aba Usuários.</p>';
+}
+function updateNotifications(rows){
+  state.pendingNotifications=rows;
+  const valid=new Set(rows.map(u=>String(u.id)));
+  const seen=state.notificationSeen.filter(id=>valid.has(id));
+  if(seen.length!==state.notificationSeen.length){state.notificationSeen=seen;saveNotificationSeen()}
+  renderNotifications();
+}
+function saveNotificationSeen(){try{localStorage.setItem(notificationStorageKey(state.user.id),JSON.stringify(state.notificationSeen))}catch{}}
+async function refreshNotifications(){
+  if(state.user?.role!=='admin')return;
+  try{const rows=(await api('/api/admin/pending')).users;if(state.user?.role==='admin')updateNotifications(rows)}catch{}
+}
+function closeNotifications(){
+  $('#notificationPanel').classList.add('hidden');
+  $('#notificationBell').setAttribute('aria-expanded','false');
+  renderNotifications();
+}
+function setupNotifications(){
+  clearInterval(notificationTimer);
+  if(state.user?.role!=='admin'){state.pendingNotifications=[];state.notificationSeen=[];state.notificationUserId=null;closeNotifications();return}
+  if(state.notificationUserId!==state.user.id){
+    state.notificationUserId=state.user.id;
+    try{const saved=JSON.parse(localStorage.getItem(notificationStorageKey(state.user.id))||'[]');state.notificationSeen=Array.isArray(saved)?saved.map(String):[]}catch{state.notificationSeen=[]}
+  }
+  closeNotifications();
+  refreshNotifications();
+  notificationTimer=setInterval(refreshNotifications,30000);
+}
 const dateBR = day => day ? day.split('-').reverse().join('/') : '—';
 const shortDate = day => new Intl.DateTimeFormat('pt-BR',{weekday:'long',day:'2-digit',month:'long'}).format(new Date(day+'T12:00:00Z'));
 const formatNum = n => new Intl.NumberFormat('pt-BR').format(n || 0);
@@ -60,6 +99,7 @@ function passwordField(id,name,autocomplete){
   return '<div class="field"><label for="'+id+'">Senha</label><div class="input-icon-wrap">'+lockIcon+'<input id="'+id+'" name="'+name+'" type="password" minlength="6" required autocomplete="'+autocomplete+'" placeholder="Digite sua senha"><button class="password-toggle" type="button" data-password-toggle="'+id+'" aria-label="Mostrar senha" aria-pressed="false">'+eyeIcon+'</button></div>'+(autocomplete==='new-password'?'<small>Mínimo de 6 caracteres.</small>':'')+'</div>';
 }
 function showAuth(mode='login'){
+  clearInterval(notificationTimer);
   state.authMode=mode;
   $('#appShell').classList.add('hidden');$('#authScreen').classList.remove('hidden');
   let form='';
@@ -87,6 +127,7 @@ function showApp(){
   $('#userAvatar').textContent=(state.user.name||'F').slice(0,1).toUpperCase();
   $('#todayLabel').textContent=dateBR(today());
   document.querySelectorAll('.admin-only').forEach(el=>el.classList.toggle('hidden',state.user.role!=='admin'));
+  setupNotifications();
   const views=allowedViews(state.user.role);
   document.querySelectorAll('.nav-link[data-view]').forEach(el=>{
     el.classList.toggle('hidden',!views.includes(el.dataset.view));
@@ -96,6 +137,7 @@ function showApp(){
   navigate(state.view);
 }
 function navigate(view){
+  closeNotifications();
   if(!allowedViews(state.user.role).includes(view))view=defaultView(state.user.role);
   state.view=view;
   const titles={dashboard:'Dashboard',schedule:'Novo agendamento',bookings:'Agendamentos',users:'Usuários',admin:'Administração'};
@@ -275,6 +317,7 @@ async function renderUsers(){
 async function refreshPending(){
   try{
     const rows=(await api('/api/admin/pending')).users;
+    updateNotifications(rows);
     const target=$('#pendingBody');if(!target)return;
     target.className='';
     target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name||'Vínculo administrativo')+'</small>'+(u.requested_supplier_name?'<small class="requested-tag">Fornecedor digitado no cadastro</small>':'')+'</div><div class="approval-actions"><label class="sr-only" for="approveRole-'+esc(u.id)+'">Tipo de acesso</label><select id="approveRole-'+esc(u.id)+'" data-approve-role><option value="supplier">Fornecedor</option><option value="admin">Administrador</option><option value="commercial">Comercial</option></select><button class="btn btn-primary" data-approve="'+esc(u.id)+'">Aprovar</button></div></div>').join(''):'<div class="empty-state"><span class="empty-icon">✓</span><strong>Nenhuma aprovação pendente</strong><span>Novos cadastros aparecerão aqui.</span></div>';
@@ -333,6 +376,21 @@ function openBookingCapacityModal(){
 }
 function closeBookingCapacityModal(){$('#bookingCapacityModal').classList.add('hidden')}
 document.addEventListener('click',async e=>{
+  if(e.target.closest('#notificationBell')){
+    if(!$('#notificationPanel').classList.contains('hidden')){closeNotifications();return}
+    await refreshNotifications();
+    const unread=state.pendingNotifications.filter(u=>!state.notificationSeen.includes(String(u.id)));
+    renderNotifications();
+    $('#notificationPanel').classList.remove('hidden');
+    $('#notificationBell').setAttribute('aria-expanded','true');
+    state.notificationSeen=[...new Set([...state.notificationSeen,...unread.map(u=>String(u.id))])];
+    saveNotificationSeen();
+    $('#notificationCount').classList.add('hidden');
+    $('#notificationBell').setAttribute('aria-label','Nenhuma nova notificação');
+    return;
+  }
+  if(e.target.closest('[data-notification-user]')||e.target.closest('#notificationAll')){navigate('users');return}
+  if(!e.target.closest('#notificationArea')&&!$('#notificationPanel').classList.contains('hidden'))closeNotifications();
   const passwordToggle=e.target.closest('[data-password-toggle]');
   if(passwordToggle){
     const input=document.getElementById(passwordToggle.dataset.passwordToggle);
@@ -431,8 +489,9 @@ document.addEventListener('input',e=>{
   if(e.target.matches('[data-combo-search]'))renderComboResults(e.target.closest('[data-supplier-combo]'),e.target.value);
   if(['scheduleStart','scheduleEnd','scheduleCapacity'].includes(e.target.id))updateDailyLimitPreview();
 });
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshNotifications()});
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){closeSupplierCombos();closeHistoryModal();closeUserRoleModal();closeBookingCapacityModal();closeDashboardDayModal();return}
+  if(e.key==='Escape'){closeNotifications();closeSupplierCombos();closeHistoryModal();closeUserRoleModal();closeBookingCapacityModal();closeDashboardDayModal();return}
   if(e.key==='Enter'&&e.target.matches('[data-combo-search]')){
     const first=e.target.closest('[data-supplier-combo]').querySelector('[data-combo-option]');
     if(first){e.preventDefault();first.click()}

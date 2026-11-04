@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1f40">
   <title>Portal FLV · Agendamento de entregas</title>
-  <link rel="stylesheet" href="/styles.css?v=11">
+  <link rel="stylesheet" href="/styles.css?v=12">
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -28,22 +28,22 @@
       <div class="side-brand"><img class="brand-logo side-logo" src="/logo-dia-a-dia.png" alt="Dia a Dia"><span class="side-label"><strong>Portal FLV</strong><small>Recebimento</small></span></div>
       <div class="side-kicker side-label">MENU PRINCIPAL</div>
       <nav aria-label="Menu principal">
-        <button type="button" data-view="dashboard" class="nav-link active"><span class="nav-icon">▦</span><span class="side-label">Dashboard</span></button>
-        <button type="button" data-view="schedule" class="nav-link"><span class="nav-icon">＋</span><span class="side-label">Novo agendamento</span></button>
-        <button type="button" data-view="bookings" class="nav-link"><span class="nav-icon">▤</span><span class="side-label">Agendamentos</span></button>
-        <button type="button" data-view="users" class="nav-link admin-only hidden"><span class="nav-icon">♙</span><span class="side-label">Usuários</span></button>
-        <button type="button" data-view="admin" class="nav-link admin-only hidden"><span class="nav-icon">⚙</span><span class="side-label">Administração</span></button>
+        <button type="button" data-view="dashboard" class="nav-link active"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span class="side-label">Dashboard</span></button>
+        <button type="button" data-view="schedule" class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-9 3v5m-2.5-2.5h5"/></svg></span><span class="side-label">Novo agendamento</span></button>
+        <button type="button" data-view="bookings" class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span><span class="side-label">Agendamentos</span></button>
+        <button type="button" data-view="users" class="nav-link admin-only hidden"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2m2-13a3 3 0 0 1 0 6m1 3a5 5 0 0 1 3 4"/></svg></span><span class="side-label">Usuários</span></button>
+        <button type="button" data-view="admin" class="nav-link admin-only hidden"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2h4l.6 2.2 1.8.8 2-.9 2.8 2.8-.9 2 .8 1.8L23 11v4l-2.2.6-.8 1.8.9 2-2.8 2.8-2-.9-1.8.8L14 24h-4l-.6-2.2-1.8-.8-2 .9-2.8-2.8.9-2-.8-1.8L1 15v-4l2.2-.6.8-1.8-.9-2 2.8-2.8 2 .9 1.8-.8L10 2Z" transform="translate(0 -1) scale(1 .92)"/><circle cx="12" cy="12" r="3"/></svg></span><span class="side-label">Administração</span></button>
       </nav>
       <div class="side-spacer"></div>
-      <div class="side-help"><span class="nav-icon">ⓘ</span><span class="side-label">Entregas fora do horário?<small>Fale com o setor comercial.</small></span></div>
-      <button id="logoutBtn" type="button" class="nav-link logout"><span class="nav-icon">↪</span><span class="side-label">Sair</span></button>
+      <div class="side-help"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></svg></span><span class="side-label">Entregas fora do horário?<small>Fale com o setor comercial.</small></span></div>
+      <button id="logoutBtn" type="button" class="nav-link logout"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4m5-4 4-4-4-4m4 4H9"/></svg></span><span class="side-label">Sair</span></button>
     </aside>
     <div id="mobileOverlay" class="mobile-overlay"></div>
     <div class="main-area">
       <header class="topbar">
         <button id="menuBtn" class="icon-button mobile-menu" type="button" aria-label="Abrir menu">☰</button>
         <div><p class="top-context">OPERAÇÃO FLV <span>/</span> <span id="crumb">DASHBOARD</span></p><h2 id="pageTitle">Dashboard</h2></div>
-        <div class="top-actions"><div class="date-pill"><span class="green-dot"></span><span id="todayLabel"></span></div><div class="avatar" id="userAvatar">F</div></div>
+        <div class="top-actions"><div id="notificationArea" class="notification-area admin-only hidden"><button id="notificationBell" class="notification-bell" type="button" aria-label="Notificações de cadastros" aria-expanded="false" aria-controls="notificationPanel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></svg><span id="notificationCount" class="notification-count hidden"></span></button><div id="notificationPanel" class="notification-panel hidden" role="region" aria-label="Cadastros aguardando aprovação"><div class="notification-heading"><strong>Novos cadastros</strong><span id="notificationSummary"></span></div><div id="notificationList" class="notification-list"></div><button id="notificationAll" type="button" class="notification-all">Abrir Usuários</button></div></div><div class="date-pill"><span class="green-dot"></span><span id="todayLabel"></span></div><div class="avatar" id="userAvatar">F</div></div>
       </header>
       <main id="viewContent" class="view-content"></main>
     </div>
@@ -84,6 +84,6 @@
       <div class="capacity-footer"><button type="button" class="btn btn-primary capacity-button" data-capacity-close>Entendi <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 10 4 4 8-8"/></svg></button></div>
     </section>
   </div>
-  <script type="module" src="/app.js?v=11"></script>
+  <script type="module" src="/app.js?v=12"></script>
 </body>
 </html>
