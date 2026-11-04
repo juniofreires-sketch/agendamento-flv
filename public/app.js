@@ -91,7 +91,7 @@ function showApp(){
   document.querySelectorAll('.nav-link[data-view]').forEach(el=>{
     el.classList.toggle('hidden',!views.includes(el.dataset.view));
   });
-  if(!state.dashFrom){state.dashFrom=firstOfMonth(today());state.dashTo=lastOfMonth(today());state.bookFrom=dateOffset(today(),-90);state.bookTo=dateOffset(today(),90);state.historyFrom=dateOffset(today(),-365);state.historyTo=today();state.slotDay=firstAvailableDeliveryDay()}
+  if(!state.dashFrom){state.dashFrom=firstOfMonth(today());state.dashTo=lastOfMonth(today());const firstBookingDay=firstAvailableDeliveryDay();state.bookFrom=firstBookingDay;state.bookTo=firstBookingDay;state.historyFrom=dateOffset(today(),-365);state.historyTo=today();state.slotDay=firstBookingDay}
   if(!views.includes(state.view))state.view=defaultView(state.user.role);
   navigate(state.view);
 }
@@ -322,7 +322,7 @@ function renderAdmin(){
   updateDailyLimitPreview();
 }function openTicket(b){
   $('#ticketContent').innerHTML='<div class="ticket"><div class="ticket-header"><small>SENHA PARA ENTREGA DE MERCADORIA</small><div class="ticket-number">'+String(b.id).padStart(3,'0')+'</div></div><p class="ticket-protocol">Apresente esta senha no check-in · Protocolo AGE-'+b.id+'</p>'+
-  [['Data da entrega',dateBR(b.day)],['Horário agendado',b.slot],['Apresentação','05:00 às 05:00'],['Filial','ATACADAO DIA A DIA S.A. · 17.457.404/0009-69'],['Endereço','ST POLO DE DESENVOLVIMENTO JK TRECHO 2/3, S/N - SANTA MARIA - BRASILIA/DF - CEP 72549-575'],['Doca','FLV'],['Fornecedor',b.supplier_name],['Número do pedido',b.order_number||'—'],['Nota fiscal',b.invoice_number||'—'],['Peso da carga',formatWeight(b.weight_kg)+' kg'],['Quantidade de itens',formatNum(b.item_count)],['Quantidade de caixas',formatNum(b.box_count)],['Tipo de veículo',b.vehicle_type],['Tipo de carga',b.cargo_type],['Situação',b.status==='active'?'Confirmado':b.status==='no_show'?'No show':'Cancelado']].map(x=>'<div class="ticket-row"><span>'+esc(x[0])+'</span><strong>'+esc(x[1])+'</strong></div>').join('')+'<p class="ticket-footer">Apresente esta senha à portaria no dia da entrega.</p></div>';
+  [['Data da entrega',dateBR(b.day)],['Horário agendado',b.slot],['Filial','ATACADAO DIA A DIA S.A. · 17.457.404/0009-69'],['Endereço','ST POLO DE DESENVOLVIMENTO JK TRECHO 2/3, S/N - SANTA MARIA - BRASILIA/DF - CEP 72549-575'],['Doca','FLV'],['Fornecedor',b.supplier_name],['Número do pedido',b.order_number||'—'],['Nota fiscal',b.invoice_number||'—'],['Peso da carga',formatWeight(b.weight_kg)+' kg'],['Quantidade de itens',formatNum(b.item_count)],['Quantidade de caixas',formatNum(b.box_count)],['Tipo de veículo',b.vehicle_type],['Tipo de carga',b.cargo_type],['Situação',b.status==='active'?'Confirmado':b.status==='no_show'?'No show':'Cancelado']].map(x=>'<div class="ticket-row"><span>'+esc(x[0])+'</span><strong>'+esc(x[1])+'</strong></div>').join('')+'<p class="ticket-footer">Apresente esta senha à portaria no dia da entrega.</p></div>';
   $('#printTicket').disabled=b.status!=='active';
   $('#printTicket').title=b.status==='active'?'Imprimir senha':'Senha indisponível para impressão';
   $('#ticketModal').classList.remove('hidden');
