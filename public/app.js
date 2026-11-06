@@ -54,6 +54,7 @@ const formatNum = n => new Intl.NumberFormat('pt-BR').format(n || 0);
 const formatWeight = n => new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(n || 0);
 const today = () => state.meta?.today || new Date().toISOString().slice(0,10);
 const dateOffset = (day, n) => {const d=new Date(day+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)};
+const lastOfMonth = day => {const d=new Date(day+'T12:00:00Z');d.setUTCMonth(d.getUTCMonth()+1,0);return d.toISOString().slice(0,10)};
 const nextOpenDay = day => {let x=day;while(new Date(x+'T12:00:00Z').getUTCDay()===0)x=dateOffset(x,1);return x};
 const isSunday = day => new Date(day+'T12:00:00Z').getUTCDay()===0;
 const firstAvailableDeliveryDay = () => nextOpenDay(dateOffset(today(),1));
@@ -130,7 +131,7 @@ function showApp(){
   document.querySelectorAll('.nav-link[data-view]').forEach(el=>{
     el.classList.toggle('hidden',!views.includes(el.dataset.view));
   });
-  state.dashFrom=today();state.dashTo=today();state.dashSupplier='';
+  state.dashFrom=today();state.dashTo=lastOfMonth(today());state.dashSupplier='';
   if(!state.bookFrom){const firstBookingDay=firstAvailableDeliveryDay();state.bookFrom=firstBookingDay;state.bookTo=firstBookingDay;state.historyFrom=dateOffset(today(),-365);state.historyTo=today();state.slotDay=firstBookingDay}
   if(!views.includes(state.view))state.view=defaultView(state.user.role);
   navigate(state.view);
