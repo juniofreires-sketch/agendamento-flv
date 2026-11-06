@@ -288,7 +288,7 @@ const server = http.createServer(async (req,res) => {
       const from=url.searchParams.get('from')||'0000-01-01',to=url.searchParams.get('to')||'9999-12-31';
       if(!isValidDay(from)||!isValidDay(to)||from>to)return fail(res,400,'Per\u00edodo inv\u00e1lido.');
       const selectedSupplier=user.role==='admin'?Number(url.searchParams.get('supplier_id')||0):0;
-      const query=selectBookings+" WHERE b.day BETWEEN ? AND ? AND b.status='active'"+(selectedSupplier?' AND b.supplier_id=?':'')+' ORDER BY b.day,b.supplier_name,b.slot';
+      const query=selectBookings+" WHERE b.day BETWEEN ? AND ? AND b.status='active'"+(selectedSupplier?' AND b.supplier_id=?':'')+' ORDER BY b.day,s.name,b.slot';
       const bookings=db.prepare(query).all(...(selectedSupplier?[from,to,selectedSupplier]:[from,to]));
       const grouped=new Map();
       for(const booking of bookings){
@@ -296,15 +296,6 @@ const server = http.createServer(async (req,res) => {
         let row=grouped.get(key);
         if(!row){row={day:booking.day,supplier_id:booking.supplier_id,supplier_name:booking.supplier_name,appointment_count:0,weight_total:0,box_total:0,item_total:0,slotSet:new Set()};grouped.set(key,row)}
         row.appointment_count++;row.weight_total+=Number(booking.weight_kg||0);row.box_total+=Number(booking.box_count||0);row.item_total+=Number(booking.item_count||0);row.slotSet.add(String(booking.slot).slice(0,5));
-      }
-      if(user.role==='commercial'){
-        const byDay=new Map();
-        for(const row of grouped.values()){
-          let day=byDay.get(row.day);
-          if(!day){day={count:0,weight_total:0,box_total:0,item_total:0};byDay.set(row.day,day)}
-          day.count++;day.weight_total+=row.weight_total;day.box_total+=row.box_total;day.item_total+=row.item_total;
-        }
-        return json(res,200,Array.from(byDay,([day,row])=>({day,supplier_id:null,supplier_name:null,appointment_count:row.count,slots:null,weight_total:row.weight_total,box_total:row.box_total,item_total:row.item_total})));
       }
       return json(res,200,Array.from(grouped.values()).map(row=>({day:row.day,supplier_id:row.supplier_id,supplier_name:row.supplier_name,appointment_count:row.appointment_count,slots:Array.from(row.slotSet).sort().join(', '),weight_total:row.weight_total,box_total:row.box_total,item_total:row.item_total})));
     }

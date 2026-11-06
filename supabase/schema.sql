@@ -531,24 +531,14 @@ begin
     raise exception 'No permission to access this dashboard.';
   end if;
   if p_from is null or p_to is null or p_from>p_to then raise exception 'Invalid date range.'; end if;
-  if requester.role='admin' then
-    return query
-      select b.day,b.supplier_id,s.name,count(*)::bigint,
-        pg_catalog.string_agg(pg_catalog.to_char(b.slot,'HH24:MI'),', ' order by b.slot),
-        coalesce(sum(b.weight_kg),0)::numeric,coalesce(sum(b.box_count),0)::bigint,coalesce(sum(b.item_count),0)::bigint
-      from public.bookings b join public.suppliers s on s.id=b.supplier_id
-      where b.day between p_from and p_to and b.status='active'
-      group by b.day,b.supplier_id,s.name
-      order by b.day,s.name;
-    return;
-  end if;
   return query
-    select b.day,null::bigint,null::text,count(distinct b.supplier_id)::bigint,null::text,
+    select b.day,b.supplier_id,s.name,count(*)::bigint,
+      pg_catalog.string_agg(pg_catalog.to_char(b.slot,'HH24:MI'),', ' order by b.slot),
       coalesce(sum(b.weight_kg),0)::numeric,coalesce(sum(b.box_count),0)::bigint,coalesce(sum(b.item_count),0)::bigint
-    from public.bookings b
+    from public.bookings b join public.suppliers s on s.id=b.supplier_id
     where b.day between p_from and p_to and b.status='active'
-    group by b.day
-    order by b.day;
+    group by b.day,b.supplier_id,s.name
+    order by b.day,s.name;
 end;
 $$;
 revoke all on function public.dashboard_daily_supplier_summary(date,date) from public, anon, authenticated;

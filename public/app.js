@@ -54,8 +54,6 @@ const formatNum = n => new Intl.NumberFormat('pt-BR').format(n || 0);
 const formatWeight = n => new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(n || 0);
 const today = () => state.meta?.today || new Date().toISOString().slice(0,10);
 const dateOffset = (day, n) => {const d=new Date(day+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)};
-const firstOfMonth = day => day.slice(0,7)+'-01';
-const lastOfMonth = day => {const d=new Date(day+'T12:00:00Z');d.setUTCMonth(d.getUTCMonth()+1,0);return d.toISOString().slice(0,10)};
 const nextOpenDay = day => {let x=day;while(new Date(x+'T12:00:00Z').getUTCDay()===0)x=dateOffset(x,1);return x};
 const isSunday = day => new Date(day+'T12:00:00Z').getUTCDay()===0;
 const firstAvailableDeliveryDay = () => nextOpenDay(dateOffset(today(),1));
@@ -132,7 +130,8 @@ function showApp(){
   document.querySelectorAll('.nav-link[data-view]').forEach(el=>{
     el.classList.toggle('hidden',!views.includes(el.dataset.view));
   });
-  if(!state.dashFrom){state.dashFrom=firstOfMonth(today());state.dashTo=lastOfMonth(today());const firstBookingDay=firstAvailableDeliveryDay();state.bookFrom=firstBookingDay;state.bookTo=firstBookingDay;state.historyFrom=dateOffset(today(),-365);state.historyTo=today();state.slotDay=firstBookingDay}
+  state.dashFrom=today();state.dashTo=today();state.dashSupplier='';
+  if(!state.bookFrom){const firstBookingDay=firstAvailableDeliveryDay();state.bookFrom=firstBookingDay;state.bookTo=firstBookingDay;state.historyFrom=dateOffset(today(),-365);state.historyTo=today();state.slotDay=firstBookingDay}
   if(!views.includes(state.view))state.view=defaultView(state.user.role);
   navigate(state.view);
 }
@@ -198,20 +197,20 @@ async function renderDashboard(){
     for(const row of dailySupplierRows){let day=dayGroups.get(row.day);if(!day){day={day:row.day,count:0};dayGroups.set(row.day,day)}day.count+=row.supplier_id==null?Number(row.appointment_count||0):1}
     const dailyCounts=Array.from(dayGroups.values()).sort((a,b)=>a.day.localeCompare(b.day));
     const maxDay=Math.max(1,...dailyCounts.map(row=>row.count));
-    const dailyChart=dailyCounts.length?dailyCounts.map(row=>'<div class="chart-row"><div class="chart-day-label"><span>'+weekdayName(row.day)+'</span><small>'+dateBR(row.day)+'</small></div><div class="chart-track"><i style="width:'+(row.count/maxDay*100)+'%"></i></div><strong>'+formatNum(row.count)+'</strong>'+(admin?'<button type="button" class="day-detail-button" data-dashboard-day="'+esc(row.day)+'" aria-label="Ver fornecedores agendados em '+dateBR(row.day)+'">+</button>':'')+'</div>').join(''):'<div class="empty-state">Nenhum fornecedor agendado no período.</div>';
+    const dailyChart=dailyCounts.length?dailyCounts.map(row=>'<div class="chart-row"><div class="chart-day-label"><span>'+weekdayName(row.day)+'</span><small>'+dateBR(row.day)+'</small></div><div class="chart-track"><i style="width:'+(row.count/maxDay*100)+'%"></i></div><strong>'+formatNum(row.count)+'</strong><button type="button" class="day-detail-button" data-dashboard-day="'+esc(row.day)+'" aria-label="Ver fornecedores agendados em '+dateBR(row.day)+'">+</button></div>').join(''):'<div class="empty-state">Nenhum fornecedor agendado no período.</div>';
     const colors=['#2b7fff','#71a8ff','#96bbff','#c9daf9'];
     const cargo=state.meta.cargoTypes.map((name,index)=>({name,index,count:commercial?Number(summary.cargo_counts.find(x=>x.name===name)?.count||0):active.filter(b=>b.cargo_type===name).length}));
     let degrees=0;
     const slices=cargo.map(x=>{const start=degrees;degrees+=totalBookings?x.count/totalBookings*360:0;return colors[x.index]+' '+start+'deg '+degrees+'deg'}).join(', ');
     const donutStyle=totalBookings?'background:conic-gradient('+slices+')':'background:#e7eef8';
     const legend=cargo.map(x=>'<div class="chart-legend-item"><i style="background:'+colors[x.index]+'"></i><span>'+esc(x.name)+'</span><strong>'+formatNum(x.count)+'</strong></div>').join('');
-    $('#dashBody').innerHTML='<div class="stat-grid">'+cards.map(c=>'<div class="card stat-card"><div class="stat-icon">'+c[0]+'</div><p class="stat-label">'+c[1]+'</p><p class="stat-value">'+c[2]+'<span class="stat-unit">'+c[3]+'</span></p></div>').join('')+'</div>'+'<div class="charts-grid"><div class="card section-card"><div class="section-head"><div><h3>Fornecedores por data</h3><p>Fornecedores com agendamentos confirmados no período</p></div></div><div class="weekday-chart daily-supplier-chart '+(admin?'admin-details':'summary-only')+'">'+dailyChart+'</div></div>'+'<div class="card section-card"><div class="section-head"><div><h3>Tipos de carga</h3><p>Distribuição dos agendamentos confirmados</p></div></div><div class="cargo-chart"><div class="donut-chart" style="'+donutStyle+'"><div><strong>'+formatNum(totalBookings)+'</strong><small>entregas</small></div></div><div class="chart-legend">'+legend+'</div></div></div></div>'+(admin?'<div class="dashboard-history card"><div><strong>Precisa consultar uma entrega?</strong><span>Pesquise o histórico com data, situação e fornecedor.</span></div><button class="btn" type="button" data-history-open>Abrir histórico →</button></div>':'');
+    $('#dashBody').innerHTML='<div class="stat-grid">'+cards.map(c=>'<div class="card stat-card"><div class="stat-icon">'+c[0]+'</div><p class="stat-label">'+c[1]+'</p><p class="stat-value">'+c[2]+'<span class="stat-unit">'+c[3]+'</span></p></div>').join('')+'</div>'+'<div class="charts-grid"><div class="card section-card"><div class="section-head"><div><h3>Fornecedores por data</h3><p>Fornecedores com agendamentos confirmados no período</p></div></div><div class="weekday-chart daily-supplier-chart admin-details">'+dailyChart+'</div></div>'+'<div class="card section-card"><div class="section-head"><div><h3>Tipos de carga</h3><p>Distribuição dos agendamentos confirmados</p></div></div><div class="cargo-chart"><div class="donut-chart" style="'+donutStyle+'"><div><strong>'+formatNum(totalBookings)+'</strong><small>entregas</small></div></div><div class="chart-legend">'+legend+'</div></div></div></div>'+(admin?'<div class="dashboard-history card"><div><strong>Precisa consultar uma entrega?</strong><span>Pesquise o histórico com data, situação e fornecedor.</span></div><button class="btn" type="button" data-history-open>Abrir histórico →</button></div>':'');
   }catch(error){if(requestId!==state.dashRequest)return;$('#dashBody').innerHTML='<div class="empty-state">'+esc(error.message)+'</div>';toast(error.message,true)}
 }
 function openDashboardDayModal(day){
   const rows=state.dashboardSupplierRows.filter(row=>row.day===day);
   $('#dashboardDayModalTitle').textContent='Fornecedores agendados — '+weekdayName(day)+' '+dateBR(day);
-  $('#dashboardDayModalContent').innerHTML=rows.length?'<div class="table-wrap"><table class="data-table supplier-day-table"><thead><tr><th>Fornecedor</th><th>Agendamentos</th><th>Horários</th><th>Peso total</th><th>Caixas</th><th>Itens</th></tr></thead><tbody>'+rows.sort((a,b)=>a.supplier_name.localeCompare(b.supplier_name,'pt-BR')).map(row=>'<tr><td><span class="cell-title">'+esc(row.supplier_name)+'</span></td><td>'+formatNum(row.appointment_count)+'</td><td>'+esc(row.slots)+'</td><td>'+formatWeight(row.weight_total)+' kg</td><td>'+formatNum(row.box_total)+'</td><td>'+formatNum(row.item_total)+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state">Nenhum agendamento encontrado para esta data.</div>';
+  $('#dashboardDayModalContent').innerHTML=rows.length?'<div class="table-wrap"><table class="data-table supplier-day-table"><thead><tr><th>Fornecedor</th><th>Agendamentos</th><th>Horários</th><th>Peso total</th><th>Caixas</th><th>Itens</th></tr></thead><tbody>'+rows.sort((a,b)=>String(a.slots||'').slice(0,5).localeCompare(String(b.slots||'').slice(0,5))||a.supplier_name.localeCompare(b.supplier_name,'pt-BR')).map(row=>'<tr><td><span class="cell-title">'+esc(row.supplier_name)+'</span></td><td>'+formatNum(row.appointment_count)+'</td><td>'+esc(row.slots)+'</td><td>'+formatWeight(row.weight_total)+' kg</td><td>'+formatNum(row.box_total)+'</td><td>'+formatNum(row.item_total)+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state">Nenhum agendamento encontrado para esta data.</div>';
   $('#dashboardDayModal').classList.remove('hidden');
   $('#closeDashboardDay').focus();
 }
