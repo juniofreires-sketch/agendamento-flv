@@ -532,13 +532,12 @@ begin
   end if;
   if p_from is null or p_to is null or p_from>p_to then raise exception 'Invalid date range.'; end if;
   return query
-    select b.day,b.supplier_id,s.name,count(*)::bigint,
-      pg_catalog.string_agg(pg_catalog.to_char(b.slot,'HH24:MI'),', ' order by b.slot),
-      coalesce(sum(b.weight_kg),0)::numeric,coalesce(sum(b.box_count),0)::bigint,coalesce(sum(b.item_count),0)::bigint
+    select b.day,b.supplier_id,s.name,1::bigint,
+      pg_catalog.to_char(b.slot,'HH24:MI'),
+      b.weight_kg::numeric,b.box_count::bigint,b.item_count::bigint
     from public.bookings b join public.suppliers s on s.id=b.supplier_id
     where b.day between p_from and p_to and b.status='active'
-    group by b.day,b.supplier_id,s.name
-    order by b.day,s.name;
+    order by b.day,b.slot,s.name,b.id;
 end;
 $$;
 revoke all on function public.dashboard_daily_supplier_summary(date,date) from public, anon, authenticated;

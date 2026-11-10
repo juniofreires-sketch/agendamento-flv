@@ -156,20 +156,6 @@ function bookingTable(rows,actions=true,adminCheck=false){
   if(!rows.length)return '<div class="empty-state"><span class="empty-icon">▤</span><strong>Nenhum agendamento encontrado</strong><span>Altere o período ou crie um novo agendamento.</span></div>';
   return '<div class="table-wrap"><table class="data-table"><thead><tr><th>Senha</th><th>Data e horário</th><th>Fornecedor</th><th>Carga</th><th>Situação</th><th></th></tr></thead><tbody>'+rows.map(b=>'<tr><td><span class="cell-title">#'+String(b.id).padStart(3,'0')+'</span><span class="cell-sub">'+esc(b.vehicle_type)+'</span></td><td><span class="cell-title">'+dateBR(b.day)+'</span><span class="cell-sub">'+esc(b.slot)+'</span></td><td><span class="cell-title">'+esc(b.supplier_name)+'</span></td><td><span class="cell-title">'+formatWeight(b.weight_kg)+' kg</span><span class="cell-sub">'+formatNum(b.box_count)+' caixas · '+formatNum(b.item_count)+' itens</span></td><td><span class="badge '+b.status+'">'+bookingStatusLabel(b.status)+'</span></td><td><div class="mini-actions"><button type="button" class="btn" data-ticket="'+b.id+'">Senha</button>'+(adminCheck&&b.status==='active'&&b.day<=today()?'<button type="button" class="btn btn-no-show" data-no-show="'+b.id+'" title="Marcar como No show">Check</button>':'')+(actions&&b.status==='active'?'<button type="button" class="btn btn-danger" data-cancel="'+b.id+'">Cancelar</button>':'')+'</div></td></tr>').join('')+'</tbody></table></div>';
 }
-function summarizeBookingsBySupplierDay(bookings){
-  const groups=new Map();
-  for(const booking of bookings){
-    const key=booking.day+':'+booking.supplier_id;
-    let row=groups.get(key);
-    if(!row){row={day:booking.day,supplier_id:booking.supplier_id,supplier_name:booking.supplier_name,appointment_count:0,weight_total:0,box_total:0,item_total:0,slotSet:new Set()};groups.set(key,row)}
-    row.appointment_count++;
-    row.weight_total+=Number(booking.weight_kg||0);
-    row.box_total+=Number(booking.box_count||0);
-    row.item_total+=Number(booking.item_count||0);
-    row.slotSet.add(String(booking.slot).slice(0,5));
-  }
-  return Array.from(groups.values()).map(row=>({day:row.day,supplier_id:row.supplier_id,supplier_name:row.supplier_name,appointment_count:row.appointment_count,weight_total:row.weight_total,box_total:row.box_total,item_total:row.item_total,slots:Array.from(row.slotSet).sort().join(', ')}));
-}
 const weekdayName=day=>new Intl.DateTimeFormat('pt-BR',{weekday:'long'}).format(new Date(day+'T12:00:00Z')).replace(/^./,letter=>letter.toUpperCase());
 async function renderDashboard(){
   const requestId=++state.dashRequest;
@@ -195,7 +181,7 @@ async function renderDashboard(){
     const totalBoxes=commercial?Number(summary.boxes||0):sum('box_count');
     const cards=[['▣','Carros agendados',formatNum(totalBookings),'veículos'],['◈','Peso total',formatWeight(totalWeight),'kg'],['≡','Quantidade de itens',formatNum(totalItems),'itens'],['▤','Quantidade de caixas',formatNum(totalBoxes),'caixas']];
     const dayGroups=new Map();
-    for(const row of dailySupplierRows){let day=dayGroups.get(row.day);if(!day){day={day:row.day,count:0};dayGroups.set(row.day,day)}day.count+=row.supplier_id==null?Number(row.appointment_count||0):1}
+    for(const row of dailySupplierRows){let day=dayGroups.get(row.day);if(!day){day={day:row.day,count:0};dayGroups.set(row.day,day)}day.count+=Number(row.appointment_count||0)}
     const dailyCounts=Array.from(dayGroups.values()).sort((a,b)=>a.day.localeCompare(b.day));
     const maxDay=Math.max(1,...dailyCounts.map(row=>row.count));
     const dailyChart=dailyCounts.length?dailyCounts.map(row=>'<div class="chart-row"><div class="chart-day-label"><span>'+weekdayName(row.day)+'</span><small>'+dateBR(row.day)+'</small></div><div class="chart-track"><i style="width:'+(row.count/maxDay*100)+'%"></i></div><strong>'+formatNum(row.count)+'</strong><button type="button" class="day-detail-button" data-dashboard-day="'+esc(row.day)+'" aria-label="Ver fornecedores agendados em '+dateBR(row.day)+'">+</button></div>').join(''):'<div class="empty-state">Nenhum fornecedor agendado no período.</div>';

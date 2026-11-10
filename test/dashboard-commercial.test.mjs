@@ -36,7 +36,7 @@ try {
   date.setUTCDate(date.getUTCDate() + 14);
   while (date.getUTCDay() === 0) date.setUTCDate(date.getUTCDate() + 1);
   const day = date.toISOString().slice(0, 10);
-  for (const [supplier, slot, weight] of [[suppliers[0], '06:00', 100], [suppliers[1], '05:00', 200]]) {
+  for (const [supplier, slot, weight] of [[suppliers[0], '06:00', 100], [suppliers[0], '08:00', 150], [suppliers[1], '05:00', 200]]) {
     const booking = await call('POST', '/api/bookings', {
       supplier_id: supplier.id, day, slot, weight_kg: weight, item_count: 2,
       box_count: 3, vehicle_type: 'VUC', cargo_type: 'Paletizada',
@@ -45,10 +45,11 @@ try {
   }
   const details = await call('GET', `/api/dashboard/daily-suppliers?from=${day}&to=${day}`, undefined, commercialCookie);
   assert.equal(details.status, 200);
-  assert.equal(details.data.length, 2);
-  assert.deepEqual(details.data.map(row => row.supplier_name).sort(), suppliers.map(row => row.name).sort());
-  assert.deepEqual(details.data.map(row => row.slots).sort(), ['05:00', '06:00']);
-  assert.equal(details.data.reduce((sum, row) => sum + row.weight_total, 0), 300);
+  assert.equal(details.data.length, 3);
+  assert.deepEqual(details.data.map(row => row.supplier_name).sort(), [suppliers[0].name, suppliers[0].name, suppliers[1].name].sort());
+  assert.deepEqual(details.data.map(row => row.slots), ['05:00', '06:00', '08:00']);
+  assert.deepEqual(details.data.map(row => row.appointment_count), [1, 1, 1]);
+  assert.equal(details.data.reduce((sum, row) => sum + row.weight_total, 0), 450);
   assert.equal((await call('GET', `/api/bookings?from=${day}&to=${day}`, undefined, commercialCookie)).status, 403);
   console.log('PASS: Comercial consulta fornecedores por data sem acesso à lista de agendamentos');
 } finally {
