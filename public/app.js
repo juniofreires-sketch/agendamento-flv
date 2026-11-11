@@ -8,7 +8,7 @@ const api = async (url, method='GET', body) => {
   if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a operação.');
   return data;
 };
-const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardSupplierRows:[],bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],availabilityRequest:0,bookings:[],pending:[],adminUsers:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
+const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardSupplierRows:[],dashboardDay:'',dashboardDayPage:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],availabilityRequest:0,bookings:[],pending:[],adminUsers:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
 let notificationTimer;
 const notificationStorageKey = id => 'flv-notifications-seen:'+id;
 function renderNotifications(){
@@ -194,10 +194,21 @@ async function renderDashboard(){
     $('#dashBody').innerHTML='<div class="stat-grid">'+cards.map(c=>'<div class="card stat-card"><div class="stat-icon">'+c[0]+'</div><p class="stat-label">'+c[1]+'</p><p class="stat-value">'+c[2]+'<span class="stat-unit">'+c[3]+'</span></p></div>').join('')+'</div>'+'<div class="charts-grid"><div class="card section-card"><div class="section-head"><div><h3>Fornecedores por data</h3><p>Fornecedores com agendamentos confirmados no período</p></div></div><div class="weekday-chart daily-supplier-chart admin-details">'+dailyChart+'</div></div>'+'<div class="card section-card"><div class="section-head"><div><h3>Tipos de carga</h3><p>Distribuição dos agendamentos confirmados</p></div></div><div class="cargo-chart"><div class="donut-chart" style="'+donutStyle+'"><div><strong>'+formatNum(totalBookings)+'</strong><small>entregas</small></div></div><div class="chart-legend">'+legend+'</div></div></div></div>'+(admin?'<div class="dashboard-history card"><div><strong>Precisa consultar uma entrega?</strong><span>Pesquise o histórico com data, situação e fornecedor.</span></div><button class="btn" type="button" data-history-open>Abrir histórico →</button></div>':'');
   }catch(error){if(requestId!==state.dashRequest)return;$('#dashBody').innerHTML='<div class="empty-state">'+esc(error.message)+'</div>';toast(error.message,true)}
 }
-function openDashboardDayModal(day){
-  const rows=state.dashboardSupplierRows.filter(row=>row.day===day);
+const dashboardDayPageSize=12;
+function renderDashboardDayPage(){
+  const day=state.dashboardDay;
+  const rows=state.dashboardSupplierRows.filter(row=>row.day===day).sort((a,b)=>String(a.slots||'').slice(0,5).localeCompare(String(b.slots||'').slice(0,5))||a.supplier_name.localeCompare(b.supplier_name,'pt-BR'));
+  const pages=Math.max(1,Math.ceil(rows.length/dashboardDayPageSize));
+  state.dashboardDayPage=Math.max(0,Math.min(state.dashboardDayPage,pages-1));
+  const current=rows.slice(state.dashboardDayPage*dashboardDayPageSize,(state.dashboardDayPage+1)*dashboardDayPageSize);
   $('#dashboardDayModalTitle').textContent='Fornecedores agendados — '+weekdayName(day)+' '+dateBR(day);
-  $('#dashboardDayModalContent').innerHTML=rows.length?'<div class="table-wrap"><table class="data-table supplier-day-table"><thead><tr><th>Fornecedor</th><th>Agendamentos</th><th>Horários</th><th>Peso total</th><th>Caixas</th><th>Itens</th></tr></thead><tbody>'+rows.sort((a,b)=>String(a.slots||'').slice(0,5).localeCompare(String(b.slots||'').slice(0,5))||a.supplier_name.localeCompare(b.supplier_name,'pt-BR')).map(row=>'<tr><td><span class="cell-title">'+esc(row.supplier_name)+'</span></td><td>'+formatNum(row.appointment_count)+'</td><td>'+esc(row.slots)+'</td><td>'+formatWeight(row.weight_total)+' kg</td><td>'+formatNum(row.box_total)+'</td><td>'+formatNum(row.item_total)+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state">Nenhum agendamento encontrado para esta data.</div>';
+  $('#dashboardDayModalContent').innerHTML=rows.length?'<div class="table-wrap"><table class="data-table supplier-day-table"><thead><tr><th>Fornecedor</th><th>Agendamentos</th><th>Horários</th><th>Peso total</th><th>Caixas</th><th>Itens</th></tr></thead><tbody>'+current.map(row=>'<tr><td><span class="cell-title">'+esc(row.supplier_name)+'</span></td><td>'+formatNum(row.appointment_count)+'</td><td>'+esc(row.slots)+'</td><td>'+formatWeight(row.weight_total)+' kg</td><td>'+formatNum(row.box_total)+'</td><td>'+formatNum(row.item_total)+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state">Nenhum agendamento encontrado para esta data.</div>';
+  $('#dashboardDayPagination').innerHTML='<span>'+formatNum(rows.length)+' agendamento(s) · Página '+(state.dashboardDayPage+1)+' de '+pages+'</span><div class="dashboard-page-actions"><button type="button" class="btn" data-dashboard-page="'+(state.dashboardDayPage-1)+'"'+(state.dashboardDayPage===0?' disabled':'')+'>Anterior</button><button type="button" class="btn" data-dashboard-page="'+(state.dashboardDayPage+1)+'"'+(state.dashboardDayPage===pages-1?' disabled':'')+'>Próxima</button></div>';
+}
+function openDashboardDayModal(day){
+  state.dashboardDay=day;
+  state.dashboardDayPage=0;
+  renderDashboardDayPage();
   $('#dashboardDayModal').classList.remove('hidden');
   $('#closeDashboardDay').focus();
 }
@@ -441,6 +452,7 @@ document.addEventListener('click',async e=>{
   const view=e.target.closest('[data-view]');if(view)return navigate(view.dataset.view);
   const history=e.target.closest('[data-history-open]');if(history)return openHistoryModal();
   const dailySummary=e.target.closest('[data-dashboard-day]');if(dailySummary){openDashboardDayModal(dailySummary.dataset.dashboardDay);return}
+  const dashboardPage=e.target.closest('[data-dashboard-page]');if(dashboardPage){state.dashboardDayPage=Number(dashboardPage.dataset.dashboardPage);renderDashboardDayPage();return}
   const bookingSlot=e.target.closest('[data-booking-slot]');
   if(bookingSlot){state.selectedSlot=bookingSlot.dataset.bookingSlot;renderAvailableSlots();return}
   const tab=e.target.closest('[data-booktab]');
