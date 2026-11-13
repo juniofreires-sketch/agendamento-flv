@@ -195,9 +195,10 @@ async function renderDashboard(){
   }catch(error){if(requestId!==state.dashRequest)return;$('#dashBody').innerHTML='<div class="empty-state">'+esc(error.message)+'</div>';toast(error.message,true)}
 }
 const dashboardDayPageSize=12;
+const dashboardDayRows=day=>state.dashboardSupplierRows.filter(row=>row.day===day).sort((a,b)=>String(a.slots||'').slice(0,5).localeCompare(String(b.slots||'').slice(0,5))||a.supplier_name.localeCompare(b.supplier_name,'pt-BR'));
 function renderDashboardDayPage(){
   const day=state.dashboardDay;
-  const rows=state.dashboardSupplierRows.filter(row=>row.day===day).sort((a,b)=>String(a.slots||'').slice(0,5).localeCompare(String(b.slots||'').slice(0,5))||a.supplier_name.localeCompare(b.supplier_name,'pt-BR'));
+  const rows=dashboardDayRows(day);
   const pages=Math.max(1,Math.ceil(rows.length/dashboardDayPageSize));
   state.dashboardDayPage=Math.max(0,Math.min(state.dashboardDayPage,pages-1));
   const current=rows.slice(state.dashboardDayPage*dashboardDayPageSize,(state.dashboardDayPage+1)*dashboardDayPageSize);
@@ -213,6 +214,15 @@ function openDashboardDayModal(day){
   $('#closeDashboardDay').focus();
 }
 function closeDashboardDayModal(){$('#dashboardDayModal').classList.add('hidden')}
+function printDashboardDay(){
+  if($('#dashboardDayModal').classList.contains('hidden')||!state.dashboardDay)return;
+  const day=state.dashboardDay,rows=dashboardDayRows(day);
+  if(!rows.length){toast('Não há agendamentos para imprimir nesta data.',true);return}
+  $('#agendaPrint').innerHTML='<header class="agenda-print-header"><h1>Agenda de recebimento FLV</h1><p>'+esc(weekdayName(day))+' · '+dateBR(day)+' · '+formatNum(rows.length)+' agendamento(s)</p></header><table class="agenda-print-table"><thead><tr><th>Fornecedor</th><th>Horário agendado</th><th>Peso</th><th>Caixas</th><th>Itens</th><th>Horário chegada</th></tr></thead><tbody>'+rows.map(row=>'<tr><td>'+esc(row.supplier_name)+'</td><td>'+esc(row.slots)+'</td><td>'+formatWeight(row.weight_total)+' kg</td><td>'+formatNum(row.box_total)+'</td><td>'+formatNum(row.item_total)+'</td><td class="arrival-cell"></td></tr>').join('')+'</tbody></table>';
+  document.body.classList.add('printing-agenda');
+  window.print();
+}
+window.addEventListener('afterprint',()=>{document.body.classList.remove('printing-agenda');$('#agendaPrint').replaceChildren()});
 function supplierField(){
   if(state.user.role!=='admin'){
     const linked=state.user.supplier_id&&state.user.supplier_name;
@@ -477,6 +487,7 @@ document.addEventListener('click',async e=>{
   if(e.target.id==='mobileOverlay'){$('#sidebar').classList.remove('open');$('#mobileOverlay').classList.remove('show')}
   if(e.target.id==='closeTicket'||e.target.id==='ticketModal')$('#ticketModal').classList.add('hidden');
   if(e.target.id==='closeDashboardDay'||e.target.id==='dashboardDayModal')closeDashboardDayModal();
+  if(e.target.id==='printDashboardDay'){printDashboardDay();return}
   if(e.target.id==='closeBookingCapacity'||e.target.id==='bookingCapacityModal'||e.target.closest('[data-capacity-close]'))closeBookingCapacityModal();
   if(e.target.id==='closeHistory'||e.target.id==='cancelHistory'||e.target.id==='historyModal')closeHistoryModal();
   if(e.target.id==='closeUserRole'||e.target.id==='cancelUserRole'||e.target.id==='userRoleModal')closeUserRoleModal();

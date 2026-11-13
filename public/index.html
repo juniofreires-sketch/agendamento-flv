@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1f40">
   <title>Portal FLV · Agendamento de entregas</title>
-  <link rel="stylesheet" href="/styles.css?v=13">
+  <link rel="stylesheet" href="/styles.css?v=14">
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -59,7 +59,7 @@
   </div>
   <div id="dashboardDayModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="dashboardDayModalTitle">
     <div class="history-window dashboard-day-window">
-      <div class="modal-toolbar"><strong id="dashboardDayModalTitle">Fornecedores agendados</strong><button type="button" id="closeDashboardDay" class="icon-button" aria-label="Fechar">×</button></div>
+      <div class="modal-toolbar"><strong id="dashboardDayModalTitle">Fornecedores agendados</strong><div><button type="button" id="printDashboardDay" class="btn dashboard-print-button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M7 14h10v7H7zM17 11h.01"/></svg>Imprimir agendamento</button><button type="button" id="closeDashboardDay" class="icon-button" aria-label="Fechar">×</button></div></div>
       <div id="dashboardDayModalContent" class="dashboard-day-content"></div>
       <div id="dashboardDayPagination" class="dashboard-day-pagination" aria-live="polite"></div>
     </div>
@@ -85,6 +85,7 @@
       <div class="capacity-footer"><button type="button" class="btn btn-primary capacity-button" data-capacity-close>Entendi <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 10 4 4 8-8"/></svg></button></div>
     </section>
   </div>
-  <script type="module" src="/app.js?v=16"></script>
+  <section id="agendaPrint" class="agenda-print" aria-hidden="true"></section>
+  <script type="module" src="/app.js?v=17"></script>
 </body>
 </html>
