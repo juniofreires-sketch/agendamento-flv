@@ -487,7 +487,7 @@ document.addEventListener('click',async e=>{
   if(e.target.id==='mobileOverlay'){$('#sidebar').classList.remove('open');$('#mobileOverlay').classList.remove('show')}
   if(e.target.id==='closeTicket'||e.target.id==='ticketModal')$('#ticketModal').classList.add('hidden');
   if(e.target.id==='closeDashboardDay'||e.target.id==='dashboardDayModal')closeDashboardDayModal();
-  if(e.target.id==='printDashboardDay'){printDashboardDay();return}
+  if(e.target.closest('#printDashboardDay')){printDashboardDay();return}
   if(e.target.id==='closeBookingCapacity'||e.target.id==='bookingCapacityModal'||e.target.closest('[data-capacity-close]'))closeBookingCapacityModal();
   if(e.target.id==='closeHistory'||e.target.id==='cancelHistory'||e.target.id==='historyModal')closeHistoryModal();
   if(e.target.id==='closeUserRole'||e.target.id==='cancelUserRole'||e.target.id==='userRoleModal')closeUserRoleModal();
