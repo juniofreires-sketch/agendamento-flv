@@ -8,7 +8,7 @@ const api = async (url, method='GET', body) => {
   if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a operação.');
   return data;
 };
-const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardSupplierRows:[],dashboardDay:'',dashboardDayPage:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],availabilityRequest:0,bookings:[],pending:[],adminUsers:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
+const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardSupplierRows:[],dashboardDay:'',dashboardDayPage:0,arrivalDay:'',arrivalTab:'pending',arrivals:[],arrivalRequest:0,delayFrom:'',delayTo:'',delaySuppliers:[],delayRequest:0,delayDetailRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],availabilityRequest:0,bookings:[],pending:[],adminUsers:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
 let notificationTimer;
 const notificationStorageKey = id => 'flv-notifications-seen:'+id;
 function renderNotifications(){
@@ -62,9 +62,9 @@ const toast = (message,error=false) => {const el=$('#toast');el.textContent=mess
 const submitButton = (form, busy) => {const button=form.querySelector('button[type="submit"]');if(button){button.disabled=busy;button.dataset.text ||= button.textContent;button.textContent=busy?'Aguarde...':button.dataset.text}};
 const supplierOptions = (selected='',includeAll=false) => (includeAll?'<option value="">Todos os fornecedores</option>':'<option value="">Selecione um fornecedor</option>')+state.meta.suppliers.map(s=>'<option value="'+s.id+'"'+(String(selected)===String(s.id)?' selected':'')+'>'+esc(s.name)+'</option>').join('');
 const optionList = arr => '<option value="">Selecione</option>'+arr.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');
-const roleNames = {admin:'Administrador',supplier:'Fornecedor',commercial:'Comercial'};
-const allowedViews = role => role==='admin'?['dashboard','schedule','bookings','users','admin']:role==='commercial'?['dashboard']:['schedule','bookings'];
-const defaultView = role => role==='admin'||role==='commercial'?'dashboard':'schedule';
+const roleNames = {admin:'Administrador',supplier:'Fornecedor',commercial:'Comercial',cd:'CD'};
+const allowedViews = role => role==='admin'?['dashboard','schedule','bookings','arrivals','users','admin']:role==='cd'?['dashboard','arrivals']:role==='commercial'?['dashboard']:['schedule','bookings'];
+const defaultView = role => ['admin','commercial','cd'].includes(role)?'dashboard':'schedule';
 function supplierCombo(id){
   return '<div class="field"><label for="'+id+'Trigger">Fornecedor *</label><div class="supplier-combo" data-supplier-combo><input type="hidden" id="'+id+'Value" name="supplier_id"><button id="'+id+'Trigger" class="supplier-trigger" type="button" data-combo-trigger aria-haspopup="listbox" aria-expanded="false"><span data-combo-label>Selecione um fornecedor</span><span aria-hidden="true">⌄</span></button><div class="supplier-popover" data-combo-panel hidden><input type="search" data-combo-search aria-label="Pesquisar fornecedor" placeholder="Pesquisar fornecedor..."><div class="supplier-results" data-combo-results role="listbox"></div></div></div></div>';
 }
@@ -132,6 +132,7 @@ function showApp(){
     el.classList.toggle('hidden',!views.includes(el.dataset.view));
   });
   state.dashFrom=today();state.dashTo=lastOfMonth(today());state.dashSupplier='';
+  state.arrivalDay=today();state.arrivalTab='pending';state.delayFrom=today().slice(0,8)+'01';state.delayTo=today();
   if(!state.bookFrom){const firstBookingDay=firstAvailableDeliveryDay();state.bookFrom=firstBookingDay;state.bookTo=firstBookingDay;state.historyFrom=dateOffset(today(),-365);state.historyTo=today();state.slotDay=firstBookingDay}
   if(!views.includes(state.view))state.view=defaultView(state.user.role);
   navigate(state.view);
@@ -140,13 +141,14 @@ function navigate(view){
   closeNotifications();
   if(!allowedViews(state.user.role).includes(view))view=defaultView(state.user.role);
   state.view=view;
-  const titles={dashboard:'Dashboard',schedule:'Novo agendamento',bookings:'Agendamentos',users:'Usuários',admin:'Administração'};
+  const titles={dashboard:'Dashboard',schedule:'Novo agendamento',bookings:'Agendamentos',arrivals:'Chegada CD',users:'Usuários',admin:'Administração'};
   $('#pageTitle').textContent=titles[view];$('#crumb').textContent=titles[view].toUpperCase();
   document.querySelectorAll('.nav-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
   $('#sidebar').classList.remove('open');$('#mobileOverlay').classList.remove('show');
   if(view==='dashboard')renderDashboard();
   if(view==='schedule')renderSchedule();
   if(view==='bookings')renderBookings();
+  if(view==='arrivals')renderArrivals();
   if(view==='users')renderUsers();
   if(view==='admin')renderAdmin();
 }
@@ -159,7 +161,7 @@ function bookingTable(rows,actions=true,adminCheck=false){
 const weekdayName=day=>new Intl.DateTimeFormat('pt-BR',{weekday:'long'}).format(new Date(day+'T12:00:00Z')).replace(/^./,letter=>letter.toUpperCase());
 async function renderDashboard(){
   const requestId=++state.dashRequest;
-  const admin=state.user.role==='admin',commercial=state.user.role==='commercial';
+  const admin=state.user.role==='admin',commercial=['commercial','cd'].includes(state.user.role);
   const actions=admin?'<button class="btn" type="button" data-history-open>Pesquisar histórico</button><button class="btn btn-primary" type="button" data-view="schedule">+ Novo agendamento</button>':'';
   $('#viewContent').innerHTML=pageHead('PAINEL DE CONTROLE','Dashboard','Indicadores das entregas no período selecionado.',actions)+'<div class="card filter-card"><div class="field"><label for="dashFrom">De</label><input id="dashFrom" type="date" value="'+state.dashFrom+'"></div><div class="field"><label for="dashTo">Até</label><input id="dashTo" type="date" value="'+state.dashTo+'"></div>'+(admin?'<div class="field grow"><label for="dashSupplier">Fornecedor</label><select id="dashSupplier">'+supplierOptions(state.dashSupplier,true)+'</select></div>':'')+'<small id="dashFilterFeedback" class="filter-feedback" aria-live="polite">Os resultados são atualizados automaticamente.</small></div><div id="dashBody"><div class="empty-state">Carregando indicadores...</div></div>';
   try{
@@ -191,7 +193,7 @@ async function renderDashboard(){
     const slices=cargo.map(x=>{const start=degrees;degrees+=totalBookings?x.count/totalBookings*360:0;return colors[x.index]+' '+start+'deg '+degrees+'deg'}).join(', ');
     const donutStyle=totalBookings?'background:conic-gradient('+slices+')':'background:#e7eef8';
     const legend=cargo.map(x=>'<div class="chart-legend-item"><i style="background:'+colors[x.index]+'"></i><span>'+esc(x.name)+'</span><strong>'+formatNum(x.count)+'</strong></div>').join('');
-    $('#dashBody').innerHTML='<div class="stat-grid">'+cards.map(c=>'<div class="card stat-card"><div class="stat-icon">'+c[0]+'</div><p class="stat-label">'+c[1]+'</p><p class="stat-value">'+c[2]+'<span class="stat-unit">'+c[3]+'</span></p></div>').join('')+'</div>'+'<div class="charts-grid"><div class="card section-card"><div class="section-head"><div><h3>Fornecedores por data</h3><p>Fornecedores com agendamentos confirmados no período</p></div></div><div class="weekday-chart daily-supplier-chart admin-details">'+dailyChart+'</div></div>'+'<div class="card section-card"><div class="section-head"><div><h3>Tipos de carga</h3><p>Distribuição dos agendamentos confirmados</p></div></div><div class="cargo-chart"><div class="donut-chart" style="'+donutStyle+'"><div><strong>'+formatNum(totalBookings)+'</strong><small>entregas</small></div></div><div class="chart-legend">'+legend+'</div></div></div></div>'+(admin?'<div class="dashboard-history card"><div><strong>Precisa consultar uma entrega?</strong><span>Pesquise o histórico com data, situação e fornecedor.</span></div><button class="btn" type="button" data-history-open>Abrir histórico →</button></div>':'');
+    $('#dashBody').innerHTML='<div class="stat-grid">'+cards.map(c=>'<div class="card stat-card"><div class="stat-icon">'+c[0]+'</div><p class="stat-label">'+c[1]+'</p><p class="stat-value">'+c[2]+'<span class="stat-unit">'+c[3]+'</span></p></div>').join('')+'</div>'+'<div class="charts-grid"><div class="card section-card"><div class="section-head"><div><h3>Fornecedores por data</h3><p>Fornecedores com agendamentos confirmados no período</p></div></div><div class="weekday-chart daily-supplier-chart admin-details">'+dailyChart+'</div></div>'+'<div class="card section-card"><div class="section-head"><div><h3>Tipos de carga</h3><p>Distribuição dos agendamentos confirmados</p></div></div><div class="cargo-chart"><div class="donut-chart" style="'+donutStyle+'"><div><strong>'+formatNum(totalBookings)+'</strong><small>entregas</small></div></div><div class="chart-legend">'+legend+'</div></div></div></div>'+'<div class="dashboard-history card"><div><strong>Atrasos na chegada</strong><span>Consulte fornecedores com atrasos e veja cada ocorrência por data.</span></div><button class="btn" type="button" data-delay-open>Ver atrasos →</button></div>'+(admin?'<div class="dashboard-history card"><div><strong>Precisa consultar uma entrega?</strong><span>Pesquise o histórico com data, situação e fornecedor.</span></div><button class="btn" type="button" data-history-open>Abrir histórico →</button></div>':'');
   }catch(error){if(requestId!==state.dashRequest)return;$('#dashBody').innerHTML='<div class="empty-state">'+esc(error.message)+'</div>';toast(error.message,true)}
 }
 const dashboardDayPageSize=12;
@@ -224,6 +226,63 @@ function printDashboardDay(){
   window.print();
 }
 window.addEventListener('afterprint',()=>{document.body.classList.remove('printing-agenda');$('#agendaPrint').replaceChildren()});
+const minutesOfTime=value=>Number(String(value).slice(0,2))*60+Number(String(value).slice(3,5));
+const durationLabel=value=>{const minutes=Math.round(Number(value)||0);return minutes>=60?Math.floor(minutes/60)+'h '+String(minutes%60).padStart(2,'0')+'min':minutes+' min'};
+async function renderArrivals(){
+  $('#viewContent').innerHTML=pageHead('RECEBIMENTO','Chegada CD','Registre a chegada dos veículos agendados na portaria.')+
+    '<div class="card section-card arrival-card"><div class="arrival-heading"><div class="field"><label for="arrivalDay">Data da entrega</label><input id="arrivalDay" type="date" value="'+esc(state.arrivalDay)+'"></div><p>Selecione a data para consultar os agendamentos. O horário de chegada pode ser registrado no dia da entrega ou depois.</p></div><div class="tabs arrival-tabs"><button type="button" data-arrival-tab="pending">Aguardando chegada <span id="arrivalPendingCount"></span></button><button type="button" data-arrival-tab="recorded">Chegada registrada <span id="arrivalRecordedCount"></span></button></div><div id="arrivalBody" class="empty-state">Carregando agendamentos...</div></div>';
+  await refreshArrivals();
+}
+async function refreshArrivals(){
+  const request=++state.arrivalRequest,day=state.arrivalDay;
+  const target=$('#arrivalBody');if(target)target.innerHTML='<div class="empty-state">Carregando agendamentos...</div>';
+  try{
+    const result=await api('/api/arrivals?'+new URLSearchParams({day}));
+    if(request!==state.arrivalRequest||state.view!=='arrivals')return;
+    state.arrivals=result.bookings;
+    renderArrivalTab();
+  }catch(error){if(request!==state.arrivalRequest)return;$('#arrivalBody').innerHTML='<div class="empty-state">'+esc(error.message)+'</div>'}
+}
+function renderArrivalTab(){
+  const pending=state.arrivals.filter(row=>!row.arrival_time),recorded=state.arrivals.filter(row=>row.arrival_time);
+  $('#arrivalPendingCount').textContent='('+formatNum(pending.length)+')';
+  $('#arrivalRecordedCount').textContent='('+formatNum(recorded.length)+')';
+  document.querySelectorAll('[data-arrival-tab]').forEach(button=>button.classList.toggle('active',button.dataset.arrivalTab===state.arrivalTab));
+  const rows=state.arrivalTab==='pending'?pending:recorded;
+  const future=state.arrivalDay>today();
+  $('#arrivalBody').innerHTML=rows.length?'<div class="table-wrap"><table class="data-table arrival-table"><thead><tr><th>Senha / horário</th><th>Fornecedor</th><th>Pedido / nota fiscal</th><th>Carga agendada</th><th>Veículo / tipo</th><th>Horário chegada</th></tr></thead><tbody>'+
+    rows.map(row=>{const id=Number(row.booking_id||row.id),delay=row.arrival_time?minutesOfTime(row.arrival_time)-minutesOfTime(row.slot):null;
+      return '<tr><td><span class="cell-title">#'+String(id).padStart(3,'0')+'</span><span class="cell-sub">'+esc(String(row.slot).slice(0,5))+'</span></td><td><span class="cell-title">'+esc(row.supplier_name)+'</span></td><td>'+esc(row.order_number||'—')+'<span class="cell-sub">NF: '+esc(row.invoice_number||'—')+'</span></td><td><span class="cell-title">'+formatWeight(row.weight_kg)+' kg</span><span class="cell-sub">'+formatNum(row.box_count)+' caixas · '+formatNum(row.item_count)+' itens</span></td><td>'+esc(row.vehicle_type)+'<span class="cell-sub">'+esc(row.cargo_type)+'</span></td><td><form class="arrival-form" data-arrival-form="'+id+'"><label class="sr-only" for="arrivalTime-'+id+'">Horário de chegada de '+esc(row.supplier_name)+'</label><input id="arrivalTime-'+id+'" type="time" name="arrival_time" value="'+esc(row.arrival_time?String(row.arrival_time).slice(0,5):'')+'" required'+(future?' disabled':'')+'><button class="btn btn-primary" type="submit"'+(future?' disabled':'')+'>'+(row.arrival_time?'Atualizar':'Registrar')+'</button></form>'+(delay===null?'':('<small class="arrival-indicator '+(delay>0?'late':'on-time')+'">'+(delay>0?'Atraso de '+durationLabel(delay):'No horário')+'</small>'))+'</td></tr>'}).join('')+'</tbody></table></div>':'<div class="empty-state"><strong>'+(state.arrivalTab==='pending'?'Nenhuma chegada pendente nesta data.':'Nenhuma chegada registrada nesta data.')+'</strong></div>';
+}
+function closeDelayModal(){state.delayRequest++;state.delayDetailRequest++;$('#delayDetailModal').classList.add('hidden');$('#delayModal').classList.add('hidden')}
+async function openDelayModal(){
+  $('#delayModal').classList.remove('hidden');
+  await refreshDelaySummary();
+}
+async function refreshDelaySummary(){
+  const request=++state.delayRequest;
+  const target=$('#delayModalContent');
+  target.innerHTML='<div class="delay-filters"><div class="field"><label for="delayFrom">De</label><input id="delayFrom" type="date" value="'+esc(state.delayFrom)+'"></div><div class="field"><label for="delayTo">Até</label><input id="delayTo" type="date" value="'+esc(state.delayTo)+'"></div></div><p class="delay-explainer">Dias com atraso contam datas distintas. O tempo total soma os minutos de cada chegada após o horário agendado.</p><div id="delaySummaryBody" class="empty-state">Carregando atrasos...</div>';
+  if(state.delayFrom>state.delayTo){$('#delaySummaryBody').textContent='A data inicial deve ser anterior à data final.';return}
+  try{
+    const result=await api('/api/dashboard/delays?'+new URLSearchParams({from:state.delayFrom,to:state.delayTo}));
+    if(request!==state.delayRequest||$('#delayModal').classList.contains('hidden'))return;
+    state.delaySuppliers=result.suppliers;
+    $('#delaySummaryBody').innerHTML=result.suppliers.length?'<div class="table-wrap"><table class="data-table delay-table"><thead><tr><th>Fornecedor</th><th>Dias com atraso</th><th>Chegadas atrasadas</th><th>Tempo total</th><th>Média por chegada</th></tr></thead><tbody>'+result.suppliers.map((row,index)=>'<tr><td><button class="delay-supplier-link" type="button" data-delay-index="'+index+'">'+esc(row.supplier_name)+'</button></td><td>'+formatNum(row.late_days)+'</td><td>'+formatNum(row.late_arrivals)+'</td><td>'+durationLabel(row.total_delay_minutes)+'</td><td>'+durationLabel(row.average_delay_minutes)+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state"><strong>Nenhuma chegada com atraso no período.</strong><span>Altere as datas para consultar outro intervalo.</span></div>';
+  }catch(error){if(request===state.delayRequest)$('#delaySummaryBody').innerHTML='<div class="empty-state">'+esc(error.message)+'</div>'}
+}
+async function openDelayDetail(index){
+  const supplier=state.delaySuppliers[index];if(!supplier)return;
+  const request=++state.delayDetailRequest;
+  $('#delayDetailTitle').textContent='Atrasos — '+supplier.supplier_name;
+  $('#delayDetailModal').classList.remove('hidden');
+  $('#delayDetailContent').innerHTML='<div class="empty-state">Carregando ocorrências...</div>';
+  try{
+    const result=await api('/api/dashboard/delays/'+supplier.supplier_id+'?'+new URLSearchParams({from:state.delayFrom,to:state.delayTo}));
+    if(request!==state.delayDetailRequest||$('#delayDetailModal').classList.contains('hidden'))return;
+    $('#delayDetailContent').innerHTML='<p class="delay-explainer">De '+dateBR(state.delayFrom)+' até '+dateBR(state.delayTo)+' · '+formatNum(result.arrivals.length)+' chegada(s) atrasada(s)</p><div class="table-wrap"><table class="data-table delay-table"><thead><tr><th>Data</th><th>Horário agendado</th><th>Horário chegada</th><th>Tempo de atraso</th></tr></thead><tbody>'+result.arrivals.map(row=>'<tr><td>'+dateBR(row.day)+'</td><td>'+esc(String(row.slot).slice(0,5))+'</td><td>'+esc(String(row.arrival_time).slice(0,5))+'</td><td><strong>'+durationLabel(row.delay_minutes)+'</strong></td></tr>').join('')+'</tbody></table></div>';
+  }catch(error){if(request===state.delayDetailRequest)$('#delayDetailContent').innerHTML='<div class="empty-state">'+esc(error.message)+'</div>'}
+}
 function supplierField(){
   if(state.user.role!=='admin'){
     const linked=state.user.supplier_id&&state.user.supplier_name;
@@ -318,7 +377,7 @@ function openHistoryModal(){
 function closeHistoryModal(){$('#historyModal').classList.add('hidden')}
 async function renderUsers(){
   $('#viewContent').innerHTML=pageHead('GESTÃO DE ACESSOS','Usuários','Avalie solicitações e gerencie os acessos do portal.')+
-  '<div class="card section-card"><div class="section-head"><div><h3>Aguardando aprovação</h3><p>Escolha se cada conta terá acesso de Administrador, Fornecedor ou Comercial.</p></div></div><div id="pendingBody" class="empty-state">Carregando...</div></div>'+
+  '<div class="card section-card"><div class="section-head"><div><h3>Aguardando aprovação</h3><p>Escolha se cada conta terá acesso de Administrador, Fornecedor, Comercial ou CD.</p></div></div><div id="pendingBody" class="empty-state">Carregando...</div></div>'+
   '<div class="card section-card users-card"><div class="section-head"><div><h3>Usuários do portal</h3><p>Altere o perfil de contas ativas. A exclusão de fornecedores mantém o histórico das entregas.</p></div></div><div id="adminUsersBody" class="empty-state">Carregando...</div></div>';
   await Promise.all([refreshPending(),refreshAdminUsers()]);
 }
@@ -328,7 +387,7 @@ async function refreshPending(){
     updateNotifications(rows);
     const target=$('#pendingBody');if(!target)return;
     target.className='';
-    target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name||'Vínculo administrativo')+'</small>'+(u.requested_supplier_name?'<small class="requested-tag">Fornecedor digitado no cadastro</small>':'')+'</div><div class="approval-actions"><label class="sr-only" for="approveRole-'+esc(u.id)+'">Tipo de acesso</label><select id="approveRole-'+esc(u.id)+'" data-approve-role><option value="supplier">Fornecedor</option><option value="admin">Administrador</option><option value="commercial">Comercial</option></select><button class="btn btn-primary" data-approve="'+esc(u.id)+'">Aprovar</button></div></div>').join(''):'<div class="empty-state"><span class="empty-icon">✓</span><strong>Nenhuma aprovação pendente</strong><span>Novos cadastros aparecerão aqui.</span></div>';
+    target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name||'Vínculo administrativo')+'</small>'+(u.requested_supplier_name?'<small class="requested-tag">Fornecedor digitado no cadastro</small>':'')+'</div><div class="approval-actions"><label class="sr-only" for="approveRole-'+esc(u.id)+'">Tipo de acesso</label><select id="approveRole-'+esc(u.id)+'" data-approve-role><option value="supplier">Fornecedor</option><option value="admin">Administrador</option><option value="commercial">Comercial</option><option value="cd">CD</option></select><button class="btn btn-primary" data-approve="'+esc(u.id)+'">Aprovar</button></div></div>').join(''):'<div class="empty-state"><span class="empty-icon">✓</span><strong>Nenhuma aprovação pendente</strong><span>Novos cadastros aparecerão aqui.</span></div>';
   }catch(e){const target=$('#pendingBody');if(target)target.textContent=e.message;toast(e.message,true)}
 }
 async function refreshAdminUsers(){
@@ -337,14 +396,14 @@ async function refreshAdminUsers(){
     state.adminUsers=rows;
     const target=$('#adminUsersBody');if(!target)return;
     target.className='';
-    target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item user-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name||'Sem fornecedor vinculado')+'</small></div><div class="user-actions"><span class="badge '+(u.role==='admin'?'role-admin':u.role==='commercial'?'role-commercial':'role-supplier')+'">'+esc(roleNames[u.role]||u.role)+'</span><span class="badge '+(u.status==='active'?'active':'cancelled')+'">'+(u.status==='active'?'Ativo':'Pendente')+'</span>'+(u.status==='active'&&u.id!==state.user.id?'<button class="btn" type="button" data-edit-user="'+esc(u.id)+'">Alterar perfil</button>':'')+(u.role==='supplier'?'<button class="btn btn-danger" type="button" data-delete-user="'+esc(u.id)+'">Excluir</button>':'')+'</div></div>').join(''):'<div class="empty-state"><strong>Nenhum usuário cadastrado</strong></div>';
+    target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item user-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name||'Sem fornecedor vinculado')+'</small></div><div class="user-actions"><span class="badge '+(u.role==='admin'?'role-admin':u.role==='commercial'?'role-commercial':u.role==='cd'?'role-cd':'role-supplier')+'">'+esc(roleNames[u.role]||u.role)+'</span><span class="badge '+(u.status==='active'?'active':'cancelled')+'">'+(u.status==='active'?'Ativo':'Pendente')+'</span>'+(u.status==='active'&&u.id!==state.user.id?'<button class="btn" type="button" data-edit-user="'+esc(u.id)+'">Alterar perfil</button>':'')+(u.role==='supplier'?'<button class="btn btn-danger" type="button" data-delete-user="'+esc(u.id)+'">Excluir</button>':'')+'</div></div>').join(''):'<div class="empty-state"><strong>Nenhum usuário cadastrado</strong></div>';
   }catch(e){const target=$('#adminUsersBody');if(target)target.textContent=e.message;toast(e.message,true)}
 }
 function openUserRoleModal(id){
   const user=state.adminUsers.find(row=>String(row.id)===String(id));
   if(!user)return;
   state.editingUser=user;
-  $('#userRoleModalContent').innerHTML='<form id="userRoleForm"><p class="subtext">Escolha o perfil e, para Fornecedor, vincule a empresa que essa conta poderá acessar.</p><div class="field"><label for="userRole">Perfil</label><select id="userRole" name="role"><option value="admin"'+(user.role==='admin'?' selected':'')+'>Administrador</option><option value="supplier"'+(user.role==='supplier'?' selected':'')+'>Fornecedor</option><option value="commercial"'+(user.role==='commercial'?' selected':'')+'>Comercial</option></select></div><div id="userRoleSupplierField" class="field"><label for="userRoleSupplier">Fornecedor vinculado</label><select id="userRoleSupplier" name="supplier_id">'+supplierOptions(user.supplier_id)+'</select></div><div class="history-form-actions"><button type="button" class="btn" id="cancelUserRole">Cancelar</button><button type="submit" class="btn btn-primary">Salvar perfil</button></div></form>';
+  $('#userRoleModalContent').innerHTML='<form id="userRoleForm"><p class="subtext">Escolha o perfil e, para Fornecedor, vincule a empresa que essa conta poderá acessar.</p><div class="field"><label for="userRole">Perfil</label><select id="userRole" name="role"><option value="admin"'+(user.role==='admin'?' selected':'')+'>Administrador</option><option value="supplier"'+(user.role==='supplier'?' selected':'')+'>Fornecedor</option><option value="commercial"'+(user.role==='commercial'?' selected':'')+'>Comercial</option><option value="cd"'+(user.role==='cd'?' selected':'')+'>CD</option></select></div><div id="userRoleSupplierField" class="field"><label for="userRoleSupplier">Fornecedor vinculado</label><select id="userRoleSupplier" name="supplier_id">'+supplierOptions(user.supplier_id)+'</select></div><div class="history-form-actions"><button type="button" class="btn" id="cancelUserRole">Cancelar</button><button type="submit" class="btn btn-primary">Salvar perfil</button></div></form>';
   $('#userRoleModal').classList.remove('hidden');
   updateUserRoleSupplierVisibility();
 }
@@ -462,6 +521,9 @@ document.addEventListener('click',async e=>{
   const auth=e.target.closest('[data-auth]');if(auth)return showAuth(auth.dataset.auth);
   const view=e.target.closest('[data-view]');if(view)return navigate(view.dataset.view);
   const history=e.target.closest('[data-history-open]');if(history)return openHistoryModal();
+  if(e.target.closest('[data-delay-open]')){openDelayModal();return}
+  const delaySupplier=e.target.closest('[data-delay-index]');if(delaySupplier){openDelayDetail(Number(delaySupplier.dataset.delayIndex));return}
+  const arrivalTab=e.target.closest('[data-arrival-tab]');if(arrivalTab){state.arrivalTab=arrivalTab.dataset.arrivalTab;renderArrivalTab();return}
   const dailySummary=e.target.closest('[data-dashboard-day]');if(dailySummary){openDashboardDayModal(dailySummary.dataset.dashboardDay);return}
   const dashboardPage=e.target.closest('[data-dashboard-page]');if(dashboardPage){state.dashboardDayPage=Number(dashboardPage.dataset.dashboardPage);renderDashboardDayPage();return}
   const bookingSlot=e.target.closest('[data-booking-slot]');
@@ -488,6 +550,8 @@ document.addEventListener('click',async e=>{
   if(e.target.id==='mobileOverlay'){$('#sidebar').classList.remove('open');$('#mobileOverlay').classList.remove('show')}
   if(e.target.id==='closeTicket'||e.target.id==='ticketModal')$('#ticketModal').classList.add('hidden');
   if(e.target.id==='closeDashboardDay'||e.target.id==='dashboardDayModal')closeDashboardDayModal();
+  if(e.target.id==='closeDelayDetail'||e.target.id==='delayDetailModal'){state.delayDetailRequest++;$('#delayDetailModal').classList.add('hidden')}
+  if(e.target.id==='closeDelayModal'||e.target.id==='delayModal')closeDelayModal();
   if(e.target.closest('#printDashboardDay')){printDashboardDay();return}
   if(e.target.id==='closeBookingCapacity'||e.target.id==='bookingCapacityModal'||e.target.closest('[data-capacity-close]'))closeBookingCapacityModal();
   if(e.target.id==='closeHistory'||e.target.id==='cancelHistory'||e.target.id==='historyModal')closeHistoryModal();
@@ -501,7 +565,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshNotifications()});
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){closeNotifications();closeSupplierCombos();closeHistoryModal();closeUserRoleModal();closeBookingCapacityModal();closeDashboardDayModal();return}
+  if(e.key==='Escape'){closeNotifications();closeSupplierCombos();closeHistoryModal();closeUserRoleModal();closeBookingCapacityModal();closeDashboardDayModal();closeDelayModal();return}
   if(e.key==='Enter'&&e.target.matches('[data-combo-search]')){
     const first=e.target.closest('[data-supplier-combo]').querySelector('[data-combo-option]');
     if(first){e.preventDefault();first.click()}
@@ -512,6 +576,12 @@ document.addEventListener('keydown',e=>{
   }
 });
 document.addEventListener('change',e=>{
+  if(e.target.id==='arrivalDay'){state.arrivalDay=e.target.value||today();refreshArrivals();return}
+  if(['delayFrom','delayTo'].includes(e.target.id)){
+    state.delayFrom=$('#delayFrom').value;state.delayTo=$('#delayTo').value;
+    state.delayDetailRequest++;$('#delayDetailModal').classList.add('hidden');
+    refreshDelaySummary();return;
+  }
   if(['dashFrom','dashTo','dashSupplier'].includes(e.target.id)&&state.view==='dashboard'){
     state.dashFrom=$('#dashFrom').value;state.dashTo=$('#dashTo').value;state.dashSupplier=$('#dashSupplier')?.value||'';
     const feedback=$('#dashFilterFeedback');
@@ -533,11 +603,16 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('submit',async e=>{
   const form=e.target;
-  if(!['bootstrapForm','registerForm','loginForm','bookingForm','supplierForm','historyForm','schedulingForm','userRoleForm'].includes(form.id))return;
+  if(!form.hasAttribute('data-arrival-form')&&!['bootstrapForm','registerForm','loginForm','bookingForm','supplierForm','historyForm','schedulingForm','userRoleForm'].includes(form.id))return;
   e.preventDefault();
   submitButton(form,true);
   const values=Object.fromEntries(new FormData(form));
   try{
+    if(form.hasAttribute('data-arrival-form')){
+      await api('/api/arrivals/'+form.dataset.arrivalForm,'POST',{arrival_time:values.arrival_time});
+      toast('Horário de chegada registrado.');
+      await refreshArrivals();
+    }
     if(form.id==='bootstrapForm'){
       const r=await api('/api/bootstrap','POST',values);
       state.user=r.user;state.meta.bootstrap=false;toast('Administrador criado.');showApp();

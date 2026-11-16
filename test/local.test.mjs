@@ -30,7 +30,7 @@ const nova=await call('POST','/api/login',{email:'nova@local.test',password:'123
 assert.equal(nova.status,200);
 assert.equal(nova.data.user.supplier_name,'Empresa de Teste FLV');
 const allUsers=await call('GET','/api/admin/users',undefined,adminCookie);
-assert.equal(allUsers.data.users.length,3);
+assert.equal(allUsers.data.users.length,4);
 assert.equal((await call('GET','/api/admin/users',undefined,nova.headers['set-cookie'].split(';')[0])).status,403);
 const a=await call('POST','/api/login',{email:'a@local.test',password:'senha-local-forte'});
 const b=await call('POST','/api/login',{email:'b@local.test',password:'senha-local-forte'});
@@ -38,15 +38,15 @@ const aCookie=a.headers['set-cookie'].split(';')[0], bCookie=b.headers['set-cook
 const date=new Date();date.setUTCDate(date.getUTCDate()+14);
 let day=date.toISOString().slice(0,10);
 while(date.getUTCDay()===0){date.setUTCDate(date.getUTCDate()+1);day=date.toISOString().slice(0,10)}
-const booking={day,weight_kg:100,item_count:8,box_count:20,vehicle_type:'VUC',cargo_type:'Paletizada'};
+const booking={day,slot:'05:00',weight_kg:100,item_count:8,box_count:20,vehicle_type:'VUC',cargo_type:'Paletizada'};
 const made=[];
-for(let i=0;i<5;i++){const r=await call('POST','/api/bookings',booking,aCookie);assert.equal(r.status,200);assert.equal(r.data.booking.slot,'05:00');made.push(r.data.booking)}
-const sixth=await call('POST','/api/bookings',booking,bCookie);
+for(let i=0;i<meta.data.scheduling.vehicles_per_slot;i++){const r=await call('POST','/api/bookings',booking,aCookie);assert.equal(r.status,200);assert.equal(r.data.booking.slot,'05:00');made.push(r.data.booking)}
+const sixth=await call('POST','/api/bookings',{...booking,slot:'05:30'},bCookie);
 assert.equal(sixth.status,200);assert.equal(sixth.data.booking.slot,'05:30');
 assert.equal((await call('GET','/api/bookings/'+sixth.data.booking.id,undefined,aCookie)).status,404);
 const visible=await call('GET','/api/bookings?from='+day+'&to='+day,undefined,bCookie);
 assert.equal(visible.data.bookings.length,1);
-assert.equal((await call('GET','/api/bookings?from='+day+'&to='+day,undefined,adminCookie)).data.bookings.length,6);
+assert.equal((await call('GET','/api/bookings?from='+day+'&to='+day,undefined,adminCookie)).data.bookings.length,meta.data.scheduling.vehicles_per_slot+1);
 assert.equal((await call('POST','/api/admin/users/'+allUsers.data.users.find(u=>u.email==='a@local.test').id+'/delete',{},bCookie)).status,403);
 assert.equal((await call('POST','/api/bookings/'+made[0].id+'/cancel',{},aCookie)).status,200);
 const reused=await call('POST','/api/bookings',booking,bCookie);
@@ -55,9 +55,12 @@ const sunday=new Date(day+'T12:00:00Z');sunday.setUTCDate(sunday.getUTCDate()+((
 assert.equal((await call('POST','/api/bookings',{...booking,day:sunday.toISOString().slice(0,10)},aCookie)).status,400);
 assert.equal((await call('POST','/api/admin/suppliers',{name:'Empresa indevida'},aCookie)).status,403);
 assert.equal((await call('POST','/api/bookings',{...booking,vehicle_type:'CAMINHÃO NÃO LISTADO'},aCookie)).status,400);
-for(let i=0;i<49;i++)assert.equal((await call('POST','/api/bookings',booking,aCookie)).status,200);
+for(let i=0;i<meta.data.scheduling.daily_vehicle_limit-(meta.data.scheduling.vehicles_per_slot+1);i++){
+  const available=(await call('GET','/api/availability?day='+day,undefined,aCookie)).data.slots;
+  assert.equal((await call('POST','/api/bookings',{...booking,slot:available[0]},aCookie)).status,200);
+}
 assert.equal((await call('POST','/api/bookings',booking,bCookie)).status,409);
 assert.equal((await call('POST','/api/admin/users/'+allUsers.data.users.find(u=>u.email==='a@local.test').id+'/delete',{},adminCookie)).status,200);
-assert.equal((await call('GET','/api/bookings?from='+day+'&to='+day,undefined,adminCookie)).data.bookings.length,56);
+assert.equal((await call('GET','/api/bookings?from='+day+'&to='+day,undefined,adminCookie)).data.bookings.length,meta.data.scheduling.daily_vehicle_limit+1);
 console.log('PASS: importação, autenticação, aprovação, isolamento, capacidade, cancelamento e domingo');
 server.close();

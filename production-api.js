@@ -106,7 +106,7 @@ export async function api(path,method='GET',body){
   }
   if(p==='/api/dashboard'&&method==='GET'){
     const user=await signedInProfile();
-    if(!user||user.status!=='active'||!['admin','commercial'].includes(user.role))throw new Error('Sem permissão para acessar este painel.');
+    if(!user||user.status!=='active'||!['admin','commercial','cd'].includes(user.role))throw new Error('Sem permissão para acessar este painel.');
     const from=url.searchParams.get('from')||'0001-01-01',to=url.searchParams.get('to')||'9999-12-31';
     if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)throw new Error('Período inválido.');
     const {data,error}=await supabase.rpc('commercial_dashboard',{p_from:from,p_to:to});
@@ -114,13 +114,47 @@ export async function api(path,method='GET',body){
   }
   if(p==='/api/dashboard/daily-suppliers'&&method==='GET'){
     const profile=await signedInProfile();
-    if(!profile||profile.status!=='active'||!['admin','commercial'].includes(profile.role))throw new Error('Sem permiss\u00e3o para acessar este painel.');
+    if(!profile||profile.status!=='active'||!['admin','commercial','cd'].includes(profile.role))throw new Error('Sem permiss\u00e3o para acessar este painel.');
     const from=url.searchParams.get('from')||'0001-01-01',to=url.searchParams.get('to')||'9999-12-31';
     if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)throw new Error('Per\u00edodo inv\u00e1lido.');
     const {data,error}=await supabase.rpc('dashboard_daily_supplier_summary',{p_from:from,p_to:to});
     fail(error);
     const supplierId=profile.role==='admin'?Number(url.searchParams.get('supplier_id')||0):0;
     return (data||[]).filter(row=>!supplierId||Number(row.supplier_id)===supplierId);
+  }
+  if(p==='/api/arrivals'&&method==='GET'){
+    const profile=await signedInProfile();
+    if(!profile||profile.status!=='active'||!['admin','cd'].includes(profile.role))throw new Error('Apenas CD e administradores podem consultar chegadas.');
+    const day=url.searchParams.get('day')||localParts().day;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(day))throw new Error('Informe uma data válida.');
+    const {data,error}=await supabase.rpc('cd_arrival_bookings',{p_day:day});fail(error);
+    return {bookings:(data||[]).map(row=>({...row,slot:String(row.slot).slice(0,5),arrival_time:row.arrival_time?String(row.arrival_time).slice(0,5):null}))};
+  }
+  const arrival=/^\/api\/arrivals\/(\d+)$/.exec(p);
+  if(arrival&&method==='POST'){
+    const profile=await signedInProfile();
+    if(!profile||profile.status!=='active'||!['admin','cd'].includes(profile.role))throw new Error('Apenas CD e administradores podem registrar chegadas.');
+    const arrivalTime=String(body?.arrival_time||'');
+    if(!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(arrivalTime))throw new Error('Informe um horário de chegada válido.');
+    const {error}=await supabase.rpc('record_booking_arrival',{p_booking_id:Number(arrival[1]),p_arrival_time:arrivalTime});
+    fail(error);return {ok:true};
+  }
+  if(p==='/api/dashboard/delays'&&method==='GET'){
+    const profile=await signedInProfile();
+    if(!profile||profile.status!=='active'||!['admin','commercial','cd'].includes(profile.role))throw new Error('Sem permissão para consultar atrasos.');
+    const from=url.searchParams.get('from')||localParts().day,to=url.searchParams.get('to')||localParts().day;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)throw new Error('Período inválido.');
+    const {data,error}=await supabase.rpc('arrival_delay_summary',{p_from:from,p_to:to});fail(error);
+    return {suppliers:data||[]};
+  }
+  const delayDetail=/^\/api\/dashboard\/delays\/(\d+)$/.exec(p);
+  if(delayDetail&&method==='GET'){
+    const profile=await signedInProfile();
+    if(!profile||profile.status!=='active'||!['admin','commercial','cd'].includes(profile.role))throw new Error('Sem permissão para consultar atrasos.');
+    const from=url.searchParams.get('from')||localParts().day,to=url.searchParams.get('to')||localParts().day;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)throw new Error('Período inválido.');
+    const {data,error}=await supabase.rpc('arrival_delay_details',{p_from:from,p_to:to,p_supplier_id:Number(delayDetail[1])});fail(error);
+    return {arrivals:(data||[]).map(row=>({...row,slot:String(row.slot).slice(0,5),arrival_time:String(row.arrival_time).slice(0,5)}))};
   }
   if(p==='/api/logout'&&method==='POST'){
     const {error}=await supabase.auth.signOut();fail(error);return {ok:true};
@@ -135,7 +169,7 @@ export async function api(path,method='GET',body){
   }
   if(p==='/api/bookings'&&method==='GET'){
     const profile=await signedInProfile();
-    if(profile?.role==='commercial')throw new Error('O perfil comercial não tem acesso à lista de agendamentos.');
+    if(!profile||!['admin','supplier'].includes(profile.role))throw new Error('Este perfil não tem acesso à lista de agendamentos.');
     const from=url.searchParams.get('from')||'0001-01-01';
     const to=url.searchParams.get('to')||'9999-12-31';
     let query=supabase.from('bookings').select(bookingSelect)

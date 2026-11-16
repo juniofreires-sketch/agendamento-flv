@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1f40">
   <title>Portal FLV · Agendamento de entregas</title>
-  <link rel="stylesheet" href="/styles.css?v=15">
+  <link rel="stylesheet" href="/styles.css?v=16">
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -31,6 +31,7 @@
         <button type="button" data-view="dashboard" class="nav-link active"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span class="side-label">Dashboard</span></button>
         <button type="button" data-view="schedule" class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-9 3v5m-2.5-2.5h5"/></svg></span><span class="side-label">Novo agendamento</span></button>
         <button type="button" data-view="bookings" class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span><span class="side-label">Agendamentos</span></button>
+        <button type="button" data-view="arrivals" class="nav-link hidden"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17h2l2-7h10l3 7h1M5 17v2m14-2v2M7 10l2-4h6l2 4M8 17h.01M16 17h.01"/></svg></span><span class="side-label">Chegada CD</span></button>
         <button type="button" data-view="users" class="nav-link admin-only hidden"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2m2-13a3 3 0 0 1 0 6m1 3a5 5 0 0 1 3 4"/></svg></span><span class="side-label">Usuários</span></button>
         <button type="button" data-view="admin" class="nav-link admin-only hidden"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2h4l.6 2.2 1.8.8 2-.9 2.8 2.8-.9 2 .8 1.8L23 11v4l-2.2.6-.8 1.8.9 2-2.8 2.8-2-.9-1.8.8L14 24h-4l-.6-2.2-1.8-.8-2 .9-2.8-2.8.9-2-.8-1.8L1 15v-4l2.2-.6.8-1.8-.9-2 2.8-2.8 2 .9 1.8-.8L10 2Z" transform="translate(0 -1) scale(1 .92)"/><circle cx="12" cy="12" r="3"/></svg></span><span class="side-label">Administração</span></button>
       </nav>
@@ -70,6 +71,18 @@
       <div id="userRoleModalContent"></div>
     </div>
   </div>
+  <div id="delayModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="delayModalTitle">
+    <div class="history-window delay-window">
+      <div class="modal-toolbar"><strong id="delayModalTitle">Atrasos por fornecedor</strong><button type="button" id="closeDelayModal" class="icon-button" aria-label="Fechar">×</button></div>
+      <div id="delayModalContent" class="delay-modal-content"></div>
+    </div>
+  </div>
+  <div id="delayDetailModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="delayDetailTitle">
+    <div class="history-window delay-window">
+      <div class="modal-toolbar"><strong id="delayDetailTitle">Detalhes dos atrasos</strong><button type="button" id="closeDelayDetail" class="icon-button" aria-label="Fechar">×</button></div>
+      <div id="delayDetailContent" class="delay-modal-content"></div>
+    </div>
+  </div>
   <div id="bookingCapacityModal" class="modal-backdrop capacity-backdrop hidden" role="alertdialog" aria-modal="true" aria-labelledby="bookingCapacityTitle" aria-describedby="bookingCapacityMessage">
     <section class="capacity-dialog">
       <div class="capacity-top-row">
@@ -86,6 +99,6 @@
     </section>
   </div>
   <section id="agendaPrint" class="agenda-print" aria-hidden="true"></section>
-  <script type="module" src="/app.js?v=19"></script>
+  <script type="module" src="/app.js?v=20"></script>
 </body>
 </html>

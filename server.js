@@ -12,7 +12,7 @@ const db = new DatabaseSync(process.env.FLV_TEST_MODE === '1' ? ':memory:' : pat
 db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
 db.exec([
   'CREATE TABLE IF NOT EXISTS suppliers (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE)',
-  'CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN (\'admin\',\'supplier\',\'commercial\')), status TEXT NOT NULL CHECK(status IN (\'active\',\'pending\')), supplier_id INTEGER REFERENCES suppliers(id), requested_supplier_name TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)',
+  'CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN (\'admin\',\'supplier\',\'commercial\',\'cd\')), status TEXT NOT NULL CHECK(status IN (\'active\',\'pending\')), supplier_id INTEGER REFERENCES suppliers(id), requested_supplier_name TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)',
   'CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires_at TEXT NOT NULL)',
   'CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, supplier_id INTEGER NOT NULL REFERENCES suppliers(id), user_id TEXT REFERENCES users(id) ON DELETE SET NULL, day TEXT NOT NULL, slot TEXT NOT NULL, order_number TEXT, invoice_number TEXT, weight_kg REAL NOT NULL, item_count INTEGER NOT NULL, box_count INTEGER NOT NULL, vehicle_type TEXT NOT NULL, cargo_type TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN (\'active\',\'cancelled\',\'no_show\')), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, cancelled_at TEXT, no_show_at TEXT)',
   'CREATE INDEX IF NOT EXISTS bookings_day_slot ON bookings(day, slot, status)',
@@ -21,10 +21,10 @@ db.exec([
 if (!db.prepare('PRAGMA table_info(users)').all().some(col => col.name === 'requested_supplier_name'))
   db.exec('ALTER TABLE users ADD COLUMN requested_supplier_name TEXT');
 const usersTableSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get()?.sql || '';
-if (!usersTableSql.includes("'commercial'")) {
+if (!usersTableSql.includes("'cd'")) {
   db.exec(`PRAGMA foreign_keys=OFF;
     BEGIN IMMEDIATE;
-    CREATE TABLE users_new (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','supplier','commercial')), status TEXT NOT NULL CHECK(status IN ('active','pending')), supplier_id INTEGER REFERENCES suppliers(id), requested_supplier_name TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE users_new (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','supplier','commercial','cd')), status TEXT NOT NULL CHECK(status IN ('active','pending')), supplier_id INTEGER REFERENCES suppliers(id), requested_supplier_name TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
     INSERT INTO users_new SELECT id,name,email,password_hash,role,status,supplier_id,requested_supplier_name,created_at FROM users;
     DROP TABLE users;
     ALTER TABLE users_new RENAME TO users;
@@ -48,6 +48,13 @@ if (bookingUserColumn?.notnull || !bookingsTableSql.includes("'no_show'") || !bo
     COMMIT;
     PRAGMA foreign_keys=ON;`);
 }
+db.exec(`CREATE TABLE IF NOT EXISTS booking_arrivals (
+  booking_id INTEGER PRIMARY KEY REFERENCES bookings(id) ON DELETE CASCADE,
+  arrival_time TEXT NOT NULL,
+  recorded_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);`);
 
 const cleanSupplierName = name => String(name).trim().replace(/^[0-9][0-9./-]*\s+/, '').replace(/\s+/g, ' ');
 const seed = [...new Set(JSON.parse(fs.readFileSync(path.join(root, 'suppliers.json'), 'utf8')).map(cleanSupplierName))];
@@ -103,7 +110,8 @@ const dailyLimitFor = settings => slotsFor(settings).length * Number(settings.ve
 const commercialMessage = settings => `Os agendamentos são feitos de segunda a sábado, das ${settings.start_time} às ${settings.end_time}. Para uma entrega fora dessa janela, entre em contato com o setor comercial.`;
 const zone = 'America/Sao_Paulo';
 const nowParts = () => {
-  const d = new Date();
+  const d = process.env.FLV_TEST_MODE === '1' && process.env.FLV_TEST_NOW
+    ? new Date(process.env.FLV_TEST_NOW) : new Date();
   const day = new Intl.DateTimeFormat('sv-SE', {timeZone:zone, year:'numeric', month:'2-digit', day:'2-digit'}).format(d);
   const time = new Intl.DateTimeFormat('en-GB', {timeZone:zone, hour:'2-digit', minute:'2-digit', hourCycle:'h23'}).format(d);
   return {day, time};
@@ -173,6 +181,7 @@ const bookingRow = row => ({
   created_at:row.created_at, cancelled_at:row.cancelled_at
 });
 const selectBookings = 'SELECT b.*, s.name AS supplier_name FROM bookings b JOIN suppliers s ON s.id=b.supplier_id';
+const delayMinutesSql = "(CAST(substr(a.arrival_time,1,2) AS INTEGER)*60+CAST(substr(a.arrival_time,4,2) AS INTEGER))-(CAST(substr(b.slot,1,2) AS INTEGER)*60+CAST(substr(b.slot,4,2) AS INTEGER))";
 const sendBooking = (res,id,user) => {
   const b = db.prepare(selectBookings+' WHERE b.id=?').get(id);
   if (!b || (user.role !== 'admin' && b.supplier_id !== user.supplier_id)) return fail(res,404,'Agendamento não encontrado.');
@@ -273,7 +282,7 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'GET' && p === '/api/bookings') {
       const user = requireUser(req,res); if (!user) return;
-      if (user.role === 'commercial') return fail(res,403,'O perfil comercial não tem acesso à lista de agendamentos.');
+      if (!['admin','supplier'].includes(user.role)) return fail(res,403,'Este perfil não tem acesso à lista de agendamentos.');
       if (user.role === 'supplier' && !user.supplier_id) return fail(res,403,'Seu usuário está sem fornecedor vinculado. Peça ao administrador para corrigir o cadastro.');
       const from = url.searchParams.get('from') || '0000-01-01', to = url.searchParams.get('to') || '9999-12-31';
       if (!isValidDay(from) || !isValidDay(to) || from > to) return fail(res,400,'Período inválido.');
@@ -284,7 +293,7 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'GET' && p === '/api/dashboard/daily-suppliers') {
       const user=requireUser(req,res);if(!user)return;
-      if(!['admin','commercial'].includes(user.role))return fail(res,403,'Sem permiss\u00e3o para acessar este painel.');
+      if(!['admin','commercial','cd'].includes(user.role))return fail(res,403,'Sem permiss\u00e3o para acessar este painel.');
       const from=url.searchParams.get('from')||'0000-01-01',to=url.searchParams.get('to')||'9999-12-31';
       if(!isValidDay(from)||!isValidDay(to)||from>to)return fail(res,400,'Per\u00edodo inv\u00e1lido.');
       const selectedSupplier=user.role==='admin'?Number(url.searchParams.get('supplier_id')||0):0;
@@ -294,7 +303,7 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'GET' && p === '/api/dashboard') {
       const user = requireUser(req,res); if (!user) return;
-      if (!['admin','commercial'].includes(user.role)) return fail(res,403,'Sem permissão para acessar este painel.');
+      if (!['admin','commercial','cd'].includes(user.role)) return fail(res,403,'Sem permissão para acessar este painel.');
       const from=url.searchParams.get('from')||'0001-01-01', to=url.searchParams.get('to')||'9999-12-31';
       if (!isValidDay(from)||!isValidDay(to)||from>to) return fail(res,400,'Período inválido.');
       const rows=db.prepare(selectBookings+" WHERE b.day BETWEEN ? AND ? AND b.status='active' ORDER BY b.day").all(from,to).map(bookingRow);
@@ -302,6 +311,55 @@ const server = http.createServer(async (req,res) => {
       const weekdayCounts=weekdays.slice(1).map((name,index)=>({name,count:rows.filter(b=>new Date(b.day+'T12:00:00Z').getUTCDay()===index+1).length}));
       const cargoCounts=cargoTypes.map(name=>({name,count:rows.filter(b=>b.cargo_type===name).length}));
       return json(res,200,{carros:rows.length,peso:rows.reduce((sum,b)=>sum+Number(b.weight_kg||0),0),items:rows.reduce((sum,b)=>sum+Number(b.item_count||0),0),boxes:rows.reduce((sum,b)=>sum+Number(b.box_count||0),0),weekday_counts:weekdayCounts,cargo_counts:cargoCounts});
+    }
+    if (req.method === 'GET' && p === '/api/arrivals') {
+      const user=requireUser(req,res);if(!user)return;
+      if(!['admin','cd'].includes(user.role))return fail(res,403,'Apenas CD e administradores podem consultar chegadas.');
+      const day=url.searchParams.get('day')||nowParts().day;
+      if(!isValidDay(day))return fail(res,400,'Informe uma data válida.');
+      const rows=db.prepare(`SELECT b.*,s.name AS supplier_name,a.arrival_time,a.recorded_at FROM bookings b JOIN suppliers s ON s.id=b.supplier_id LEFT JOIN booking_arrivals a ON a.booking_id=b.id WHERE b.day=? AND b.status='active' ORDER BY b.slot,s.name,b.id`).all(day);
+      return json(res,200,{bookings:rows.map(row=>({...bookingRow(row),booking_id:row.id,arrival_time:row.arrival_time||null,recorded_at:row.recorded_at||null}))});
+    }
+    const arrivalMatch=/^\/api\/arrivals\/(\d+)$/.exec(p);
+    if (req.method === 'POST' && arrivalMatch) {
+      const user=requireUser(req,res);if(!user)return;
+      if(!['admin','cd'].includes(user.role))return fail(res,403,'Apenas CD e administradores podem registrar chegadas.');
+      const body=await readBody(req),arrivalTime=String(body.arrival_time||'');
+      if(!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(arrivalTime))return fail(res,400,'Informe um horário de chegada válido.');
+      const booking=db.prepare("SELECT day,status FROM bookings WHERE id=?").get(Number(arrivalMatch[1]));
+      if(!booking||booking.status!=='active')return fail(res,404,'Agendamento confirmado não encontrado.');
+      const now=nowParts();
+      if(booking.day>now.day||(booking.day===now.day&&arrivalTime>now.time))return fail(res,400,'O horário de chegada não pode estar no futuro.');
+      db.prepare(`INSERT INTO booking_arrivals(booking_id,arrival_time,recorded_by) VALUES (?,?,?)
+        ON CONFLICT(booking_id) DO UPDATE SET arrival_time=excluded.arrival_time,recorded_by=excluded.recorded_by,updated_at=CURRENT_TIMESTAMP`)
+        .run(Number(arrivalMatch[1]),arrivalTime,user.id);
+      return json(res,200,{ok:true});
+    }
+    if (req.method === 'GET' && p === '/api/dashboard/delays') {
+      const user=requireUser(req,res);if(!user)return;
+      if(!['admin','commercial','cd'].includes(user.role))return fail(res,403,'Sem permissão para consultar atrasos.');
+      const from=url.searchParams.get('from')||nowParts().day,to=url.searchParams.get('to')||nowParts().day;
+      if(!isValidDay(from)||!isValidDay(to)||from>to)return fail(res,400,'Período inválido.');
+      const rows=db.prepare(`SELECT b.supplier_id,s.name AS supplier_name,COUNT(DISTINCT b.day) AS late_days,
+        COUNT(*) AS late_arrivals,SUM(${delayMinutesSql}) AS total_delay_minutes,
+        ROUND(AVG(${delayMinutesSql}),1) AS average_delay_minutes
+        FROM bookings b JOIN booking_arrivals a ON a.booking_id=b.id
+        JOIN suppliers s ON s.id=b.supplier_id
+        WHERE b.status='active' AND b.day BETWEEN ? AND ? AND a.arrival_time>b.slot
+        GROUP BY b.supplier_id,s.name ORDER BY late_days DESC,total_delay_minutes DESC,s.name`).all(from,to);
+      return json(res,200,{suppliers:rows});
+    }
+    const delayDetails=/^\/api\/dashboard\/delays\/(\d+)$/.exec(p);
+    if (req.method === 'GET' && delayDetails) {
+      const user=requireUser(req,res);if(!user)return;
+      if(!['admin','commercial','cd'].includes(user.role))return fail(res,403,'Sem permissão para consultar atrasos.');
+      const from=url.searchParams.get('from')||nowParts().day,to=url.searchParams.get('to')||nowParts().day;
+      if(!isValidDay(from)||!isValidDay(to)||from>to)return fail(res,400,'Período inválido.');
+      const rows=db.prepare(`SELECT b.day,b.slot,a.arrival_time,${delayMinutesSql} AS delay_minutes
+        FROM bookings b JOIN booking_arrivals a ON a.booking_id=b.id
+        WHERE b.supplier_id=? AND b.status='active' AND b.day BETWEEN ? AND ? AND a.arrival_time>b.slot
+        ORDER BY b.day DESC,b.slot,b.id`).all(Number(delayDetails[1]),from,to);
+      return json(res,200,{arrivals:rows});
     }
     const match = /^\/api\/bookings\/(\d+)(?:\/(cancel|no-show))?$/.exec(p);
     if (match && req.method === 'GET' && !match[2]) {
@@ -350,7 +408,7 @@ const server = http.createServer(async (req,res) => {
       const admin=requireUser(req,res,true); if (!admin) return;
       if (updateRole[1]===admin.id) return fail(res,400,'Não é possível alterar o próprio perfil.');
       const b=await readBody(req), role=String(b.role||''), selected=Number(b.supplier_id||0);
-      if(!['admin','supplier','commercial'].includes(role)) return fail(res,400,'Selecione Administrador, Fornecedor ou Comercial.');
+      if(!['admin','supplier','commercial','cd'].includes(role)) return fail(res,400,'Selecione Administrador, Fornecedor, Comercial ou CD.');
       if(role==='supplier'&&!db.prepare('SELECT id FROM suppliers WHERE id=?').get(selected)) return fail(res,400,'Selecione um fornecedor para este usuário.');
       const target=db.prepare('SELECT id,status FROM users WHERE id=?').get(updateRole[1]);
       if(!target) return fail(res,404,'Usuário não encontrado.');
@@ -361,7 +419,7 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'POST' && /^\/api\/admin\/users\/[a-f0-9]+\/approve$/.test(p)) {
       if (!requireUser(req,res,true)) return;
       const b=await readBody(req), role=String(b.role||'supplier');
-      if (!['admin','supplier','commercial'].includes(role)) return fail(res,400,'Escolha Administrador, Fornecedor ou Comercial.');
+      if (!['admin','supplier','commercial','cd'].includes(role)) return fail(res,400,'Escolha Administrador, Fornecedor, Comercial ou CD.');
       const id=p.split('/')[4];
       const pending=db.prepare("SELECT * FROM users WHERE id=? AND status='pending' AND role='supplier'").get(id);
       if (!pending) return fail(res,404,'Cadastro pendente não encontrado.');
