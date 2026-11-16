@@ -43,6 +43,7 @@ try{
     assert.equal(response.status,200);return response.data.booking.id;
   };
   const ids=[await make(day1,'05:00'),await make(day1,'06:00'),await make(day2,'07:00')];
+  await make(day2,'08:00');
   assert.equal((await call('POST','/api/arrivals/'+ids[0],{arrival_time:'05:30'},cdCookie)).status,400);
   process.env.FLV_TEST_NOW=day2+'T18:00:00Z';
   assert.equal((await call('POST','/api/arrivals/'+ids[0],{arrival_time:'05:30'},supplierCookie)).status,403);
@@ -65,6 +66,17 @@ try{
   assert.equal((await call('POST','/api/arrivals/'+ids[0],{arrival_time:'05:45'},adminCookie)).status,200);
   const corrected=(await call('GET','/api/dashboard/delays?from='+day1+'&to='+day2,undefined,cdCookie)).data.suppliers[0];
   assert.equal(corrected.total_delay_minutes,105);
+  const performance=await call('GET','/api/dashboard/arrival-performance?from='+day1+'&to='+day2,undefined,commercialCookie);
+  assert.equal(performance.status,200);
+  assert.deepEqual([performance.data.totals.scheduled,performance.data.totals.recorded,performance.data.totals.late,performance.data.totals.pending],[4,3,3,1]);
+  assert.equal(performance.data.totals.late_minutes,105);
+  assert.equal(performance.data.top_suppliers[0].late_days,2);
+  assert.deepEqual(performance.data.days.map(row=>row.late),[2,1]);
+  assert.equal((await call('GET','/api/dashboard/arrival-performance?from='+day1+'&to='+day2,undefined,supplierCookie)).status,403);
+  assert.equal((await call('GET','/api/dashboard/arrival-performance?from='+day1+'&to='+day2+'&supplier_id='+supplier.id,undefined,commercialCookie)).status,403);
+  assert.equal((await call('POST','/api/arrivals/'+ids[0],{arrival_time:'05:00'},adminCookie)).status,200);
+  const punctual=(await call('GET','/api/dashboard/arrival-performance?from='+day1+'&to='+day2,undefined,cdCookie)).data;
+  assert.deepEqual([punctual.totals.late,punctual.totals.on_time,punctual.totals.late_minutes],[2,1,60]);
   console.log('PASS: CD registra chegadas, perfis isolados e atrasos consolidados por data');
 }finally{
   delete process.env.FLV_TEST_NOW;

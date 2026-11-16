@@ -8,7 +8,7 @@ const api = async (url, method='GET', body) => {
   if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a operação.');
   return data;
 };
-const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardSupplierRows:[],dashboardDay:'',dashboardDayPage:0,arrivalDay:'',arrivalTab:'pending',arrivals:[],arrivalRequest:0,delayFrom:'',delayTo:'',delaySuppliers:[],delayRequest:0,delayDetailRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],availabilityRequest:0,bookings:[],pending:[],adminUsers:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
+const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardTab:'general',dashboardSupplierRows:[],dashboardDay:'',dashboardDayPage:0,arrivalDay:'',arrivalTab:'pending',arrivals:[],arrivalRequest:0,delayFrom:'',delayTo:'',delaySuppliers:[],delayRequest:0,delayDetailRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],availabilityRequest:0,bookings:[],pending:[],adminUsers:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
 let notificationTimer;
 const notificationStorageKey = id => 'flv-notifications-seen:'+id;
 function renderNotifications(){
@@ -162,8 +162,10 @@ const weekdayName=day=>new Intl.DateTimeFormat('pt-BR',{weekday:'long'}).format(
 async function renderDashboard(){
   const requestId=++state.dashRequest;
   const admin=state.user.role==='admin',commercial=['commercial','cd'].includes(state.user.role);
-  const actions=admin?'<button class="btn" type="button" data-history-open>Pesquisar histórico</button><button class="btn btn-primary" type="button" data-view="schedule">+ Novo agendamento</button>':'';
-  $('#viewContent').innerHTML=pageHead('PAINEL DE CONTROLE','Dashboard','Indicadores das entregas no período selecionado.',actions)+'<div class="card filter-card"><div class="field"><label for="dashFrom">De</label><input id="dashFrom" type="date" value="'+state.dashFrom+'"></div><div class="field"><label for="dashTo">Até</label><input id="dashTo" type="date" value="'+state.dashTo+'"></div>'+(admin?'<div class="field grow"><label for="dashSupplier">Fornecedor</label><select id="dashSupplier">'+supplierOptions(state.dashSupplier,true)+'</select></div>':'')+'<small id="dashFilterFeedback" class="filter-feedback" aria-live="polite">Os resultados são atualizados automaticamente.</small></div><div id="dashBody"><div class="empty-state">Carregando indicadores...</div></div>';
+  const tabs='<div class="dashboard-view-tabs" role="group" aria-label="Subabas do Dashboard"><button type="button" data-dashboard-tab="general" class="'+(state.dashboardTab==='general'?'active':'')+'" aria-pressed="'+(state.dashboardTab==='general')+'">Visão geral</button><button type="button" data-dashboard-tab="arrivals" class="'+(state.dashboardTab==='arrivals'?'active':'')+'" aria-pressed="'+(state.dashboardTab==='arrivals')+'">Chegadas CD</button></div>';
+  const actions=tabs+(admin?'<button class="btn" type="button" data-history-open>Pesquisar histórico</button><button class="btn btn-primary" type="button" data-view="schedule">+ Novo agendamento</button>':'');
+  $('#viewContent').innerHTML=pageHead('PAINEL DE CONTROLE','Dashboard',state.dashboardTab==='arrivals'?'Acompanhe chegadas, pontualidade e atrasos dos fornecedores.':'Indicadores das entregas no período selecionado.',actions)+'<div class="card filter-card"><div class="field"><label for="dashFrom">De</label><input id="dashFrom" type="date" value="'+state.dashFrom+'"></div><div class="field"><label for="dashTo">Até</label><input id="dashTo" type="date" value="'+state.dashTo+'"></div>'+(admin?'<div class="field grow"><label for="dashSupplier">Fornecedor</label><select id="dashSupplier">'+supplierOptions(state.dashSupplier,true)+'</select></div>':'')+'<small id="dashFilterFeedback" class="filter-feedback" aria-live="polite">Os resultados são atualizados automaticamente.</small></div><div id="dashBody"><div class="empty-state">Carregando indicadores...</div></div>';
+  if(state.dashboardTab==='arrivals')return renderArrivalPerformance(requestId);
   try{
     const params=new URLSearchParams({from:state.dashFrom,to:state.dashTo});
     if(state.dashSupplier)params.set('supplier_id',state.dashSupplier);
@@ -194,6 +196,36 @@ async function renderDashboard(){
     const donutStyle=totalBookings?'background:conic-gradient('+slices+')':'background:#e7eef8';
     const legend=cargo.map(x=>'<div class="chart-legend-item"><i style="background:'+colors[x.index]+'"></i><span>'+esc(x.name)+'</span><strong>'+formatNum(x.count)+'</strong></div>').join('');
     $('#dashBody').innerHTML='<div class="stat-grid">'+cards.map(c=>'<div class="card stat-card"><div class="stat-icon">'+c[0]+'</div><p class="stat-label">'+c[1]+'</p><p class="stat-value">'+c[2]+'<span class="stat-unit">'+c[3]+'</span></p></div>').join('')+'</div>'+'<div class="charts-grid"><div class="card section-card"><div class="section-head"><div><h3>Fornecedores por data</h3><p>Fornecedores com agendamentos confirmados no período</p></div></div><div class="weekday-chart daily-supplier-chart admin-details">'+dailyChart+'</div></div>'+'<div class="card section-card"><div class="section-head"><div><h3>Tipos de carga</h3><p>Distribuição dos agendamentos confirmados</p></div></div><div class="cargo-chart"><div class="donut-chart" style="'+donutStyle+'"><div><strong>'+formatNum(totalBookings)+'</strong><small>entregas</small></div></div><div class="chart-legend">'+legend+'</div></div></div></div>'+'<div class="dashboard-history card"><div><strong>Atrasos na chegada</strong><span>Consulte fornecedores com atrasos e veja cada ocorrência por data.</span></div><button class="btn" type="button" data-delay-open>Ver atrasos →</button></div>'+(admin?'<div class="dashboard-history card"><div><strong>Precisa consultar uma entrega?</strong><span>Pesquise o histórico com data, situação e fornecedor.</span></div><button class="btn" type="button" data-history-open>Abrir histórico →</button></div>':'');
+  }catch(error){if(requestId!==state.dashRequest)return;$('#dashBody').innerHTML='<div class="empty-state">'+esc(error.message)+'</div>';toast(error.message,true)}
+}
+const negativeDelay=minutes=>'-'+durationLabel(minutes);
+async function renderArrivalPerformance(requestId){
+  try{
+    const params=new URLSearchParams({from:state.dashFrom,to:state.dashTo});
+    if(state.dashSupplier)params.set('supplier_id',state.dashSupplier);
+    const result=await api('/api/dashboard/arrival-performance?'+params);
+    if(requestId!==state.dashRequest||state.view!=='dashboard'||state.dashboardTab!=='arrivals')return;
+    const totals=result.totals||{};
+    const scheduled=Number(totals.scheduled||0),recorded=Number(totals.recorded||0),late=Number(totals.late||0);
+    const early=Number(totals.early||0),onTime=Number(totals.on_time||0),pending=Number(totals.pending||0),upcoming=Number(totals.upcoming||0);
+    const punctuality=recorded?Math.round((early+onTime)/recorded*100)+'%':'—';
+    const metrics=[
+      ['Agendamentos',formatNum(scheduled),'carros',''],
+      ['Chegadas registradas',formatNum(recorded),'carros',''],
+      ['No horário ou antes',formatNum(early+onTime),'chegadas','good'],
+      ['Chegadas atrasadas',formatNum(late),'chegadas','late']
+    ];
+    const cards=metrics.map(([label,value,unit,tone])=>'<div class="card cd-metric '+tone+'"><span>'+label+'</span><strong>'+value+'</strong><small>'+unit+'</small></div>').join('');
+    const top=result.top_suppliers||[];
+    state.delaySuppliers=top;
+    state.delayFrom=state.dashFrom;state.delayTo=state.dashTo;
+    const topTable=top.length?'<div class="table-wrap"><table class="data-table cd-performance-table"><thead><tr><th>Fornecedor</th><th>Dias com atraso</th><th>Chegadas atrasadas</th><th>Tempo perdido</th><th>Média por atraso</th></tr></thead><tbody>'+top.map((row,index)=>'<tr><td><button class="delay-supplier-link" type="button" data-performance-supplier="'+index+'">'+esc(row.supplier_name)+'</button></td><td>'+formatNum(row.late_days)+'</td><td>'+formatNum(row.late)+'</td><td><strong class="negative-time">'+negativeDelay(row.late_minutes)+'</strong></td><td><strong class="negative-time">'+negativeDelay(row.average_late_minutes)+'</strong></td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state"><strong>Nenhum atraso registrado no período.</strong><span>Os fornecedores aparecerão aqui quando houver chegadas após o horário agendado.</span></div>';
+    const days=result.days||[];
+    const dailyMax=Math.max(1,...days.map(row=>Number(row.scheduled||0)));
+    const daily=days.length?'<div class="cd-daily-list">'+days.map(row=>'<div class="cd-daily-row"><span>'+dateBR(row.day)+'</span><div class="cd-daily-track"><i style="width:'+(Number(row.recorded||0)/dailyMax*100)+'%"></i></div><span>'+formatNum(row.recorded)+' / '+formatNum(row.scheduled)+' chegadas</span><strong class="'+(Number(row.late)>0?'negative-time':'')+'">'+(Number(row.late)>0?formatNum(row.late)+' atraso(s) · '+negativeDelay(row.late_minutes):'Sem atraso')+'</strong></div>').join('')+'</div>':'<div class="empty-state">Nenhum agendamento no período selecionado.</div>';
+    const slots=result.slots||[];
+    const slotTable=slots.length?'<div class="table-wrap"><table class="data-table cd-performance-table"><thead><tr><th>Horário</th><th>Agendados</th><th>Chegadas</th><th>Atrasos</th><th>Tempo perdido</th></tr></thead><tbody>'+slots.map(row=>'<tr><td><strong>'+esc(String(row.slot).slice(0,5))+'</strong></td><td>'+formatNum(row.scheduled)+'</td><td>'+formatNum(row.recorded)+'</td><td>'+formatNum(row.late)+'</td><td class="'+(Number(row.late)>0?'negative-time':'')+'">'+(Number(row.late)>0?negativeDelay(row.late_minutes):'—')+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state">Nenhum horário agendado neste período.</div>';
+    $('#dashBody').innerHTML='<div class="cd-metrics">'+cards+'</div><div class="cd-status-strip card"><div><strong>'+punctuality+'</strong><span>Pontualidade: '+formatNum(onTime)+' no horário · '+formatNum(early)+' adiantadas</span></div><div><strong>'+formatNum(pending)+'</strong><span>Aguardando registro até hoje</span></div><div><strong>'+formatNum(upcoming)+'</strong><span>Agendamentos futuros</span></div><div><strong class="negative-time">'+(late?negativeDelay(totals.average_late_minutes):'—')+'</strong><span>Atraso médio por chegada atrasada</span></div></div><div class="card section-card cd-section"><div class="section-head"><div><h3>Fornecedores com mais atrasos</h3><p>Ranking por número de chegadas atrasadas. Clique no fornecedor para ver cada data.</p></div></div>'+topTable+'</div><div class="cd-analytics-grid"><div class="card section-card cd-section"><div class="section-head"><div><h3>Chegadas por data</h3><p>Registradas em relação aos agendamentos do período.</p></div></div>'+daily+'</div><div class="card section-card cd-section"><div class="section-head"><div><h3>Atrasos por horário agendado</h3><p>Compare os horários com mais ocorrências.</p></div></div>'+slotTable+'</div></div><p class="cd-panel-note">Tempo negativo em vermelho indica chegada após o horário agendado. Chegadas sem registro não entram na taxa de pontualidade.</p>';
   }catch(error){if(requestId!==state.dashRequest)return;$('#dashBody').innerHTML='<div class="empty-state">'+esc(error.message)+'</div>';toast(error.message,true)}
 }
 const dashboardDayPageSize=12;
@@ -519,10 +551,12 @@ document.addEventListener('click',async e=>{
   }
   if(!e.target.closest('[data-supplier-combo]'))closeSupplierCombos();
   const auth=e.target.closest('[data-auth]');if(auth)return showAuth(auth.dataset.auth);
+  const dashboardTab=e.target.closest('[data-dashboard-tab]');if(dashboardTab){state.dashboardTab=dashboardTab.dataset.dashboardTab;renderDashboard();return}
   const view=e.target.closest('[data-view]');if(view)return navigate(view.dataset.view);
   const history=e.target.closest('[data-history-open]');if(history)return openHistoryModal();
   if(e.target.closest('[data-delay-open]')){openDelayModal();return}
   const delaySupplier=e.target.closest('[data-delay-index]');if(delaySupplier){openDelayDetail(Number(delaySupplier.dataset.delayIndex));return}
+  const performanceSupplier=e.target.closest('[data-performance-supplier]');if(performanceSupplier){openDelayDetail(Number(performanceSupplier.dataset.performanceSupplier));return}
   const arrivalTab=e.target.closest('[data-arrival-tab]');if(arrivalTab){state.arrivalTab=arrivalTab.dataset.arrivalTab;renderArrivalTab();return}
   const dailySummary=e.target.closest('[data-dashboard-day]');if(dailySummary){openDashboardDayModal(dailySummary.dataset.dashboardDay);return}
   const dashboardPage=e.target.closest('[data-dashboard-page]');if(dashboardPage){state.dashboardDayPage=Number(dashboardPage.dataset.dashboardPage);renderDashboardDayPage();return}

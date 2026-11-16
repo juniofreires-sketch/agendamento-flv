@@ -122,6 +122,17 @@ export async function api(path,method='GET',body){
     const supplierId=profile.role==='admin'?Number(url.searchParams.get('supplier_id')||0):0;
     return (data||[]).filter(row=>!supplierId||Number(row.supplier_id)===supplierId);
   }
+  if(p==='/api/dashboard/arrival-performance'&&method==='GET'){
+    const profile=await signedInProfile();
+    if(!profile||profile.status!=='active'||!['admin','commercial','cd'].includes(profile.role))throw new Error('Sem permissão para consultar o painel de chegadas.');
+    const from=url.searchParams.get('from')||localParts().day,to=url.searchParams.get('to')||localParts().day;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)throw new Error('Período inválido.');
+    const supplierId=Number(url.searchParams.get('supplier_id')||0);
+    if(supplierId&&profile.role!=='admin')throw new Error('Apenas administradores podem filtrar por fornecedor.');
+    const {data,error}=await supabase.rpc('arrival_performance_dashboard',{
+      p_from:from,p_to:to,p_supplier_id:supplierId||null
+    });fail(error);return data;
+  }
   if(p==='/api/arrivals'&&method==='GET'){
     const profile=await signedInProfile();
     if(!profile||profile.status!=='active'||!['admin','cd'].includes(profile.role))throw new Error('Apenas CD e administradores podem consultar chegadas.');
