@@ -38,14 +38,19 @@ try{
   const day1=openDay(start.toISOString().slice(0,10));
   const after=new Date(day1+'T12:00:00Z');after.setUTCDate(after.getUTCDate()+1);
   const day2=openDay(after.toISOString().slice(0,10));
+  const after2=new Date(day2+'T12:00:00Z');after2.setUTCDate(after2.getUTCDate()+1);
+  const day3=openDay(after2.toISOString().slice(0,10));
   const make=async(day,slot)=>{
     const response=await call('POST','/api/bookings',{supplier_id:supplier.id,day,slot,weight_kg:100,item_count:2,box_count:3,vehicle_type:'VUC',cargo_type:'Paletizada'},adminCookie);
     assert.equal(response.status,200);return response.data.booking.id;
   };
   const ids=[await make(day1,'05:00'),await make(day1,'06:00'),await make(day2,'07:00')];
-  await make(day2,'08:00');
+  const pendingId=await make(day2,'08:00');
+  const futureId=await make(day3,'09:00');
   assert.equal((await call('POST','/api/arrivals/'+ids[0],{arrival_time:'05:30'},cdCookie)).status,400);
+  assert.equal((await call('POST','/api/arrivals/'+pendingId+'/no-show',{},cdCookie)).status,400);
   process.env.FLV_TEST_NOW=day2+'T18:00:00Z';
+  assert.equal((await call('POST','/api/arrivals/'+futureId+'/no-show',{},cdCookie)).status,400);
   assert.equal((await call('POST','/api/arrivals/'+ids[0],{arrival_time:'05:30'},supplierCookie)).status,403);
   for(const [id,time] of [[ids[0],'05:30'],[ids[1],'06:15'],[ids[2],'07:45']]){
     assert.equal((await call('POST','/api/arrivals/'+id,{arrival_time:time},cdCookie)).status,200);
@@ -77,6 +82,22 @@ try{
   assert.equal((await call('POST','/api/arrivals/'+ids[0],{arrival_time:'05:00'},adminCookie)).status,200);
   const punctual=(await call('GET','/api/dashboard/arrival-performance?from='+day1+'&to='+day2,undefined,cdCookie)).data;
   assert.deepEqual([punctual.totals.late,punctual.totals.on_time,punctual.totals.late_minutes],[2,1,60]);
+  assert.equal((await call('POST','/api/arrivals/'+ids[0]+'/no-show',{},cdCookie)).status,409);
+  assert.equal((await call('POST','/api/bookings/'+ids[0]+'/no-show',{},adminCookie)).status,409);
+  assert.equal((await call('POST','/api/arrivals/'+pendingId+'/no-show',{},supplierCookie)).status,403);
+  process.env.FLV_TEST_NOW=day2+'T08:00:00Z';
+  assert.equal((await call('POST','/api/arrivals/'+pendingId+'/no-show',{},cdCookie)).status,400);
+  process.env.FLV_TEST_NOW=day2+'T18:00:00Z';
+  assert.equal((await call('POST','/api/arrivals/'+pendingId+'/no-show',{},cdCookie)).status,200);
+  assert.equal((await call('POST','/api/arrivals/'+pendingId+'/no-show',{},adminCookie)).status,409);
+  assert.equal((await call('POST','/api/arrivals/'+pendingId,{arrival_time:'08:15'},cdCookie)).status,404);
+  const arrivals=(await call('GET','/api/arrivals?day='+day2,undefined,cdCookie)).data.bookings;
+  assert.deepEqual(arrivals.map(row=>row.status),['active','no_show']);
+  const withNoShow=(await call('GET','/api/dashboard/arrival-performance?from='+day1+'&to='+day3,undefined,commercialCookie)).data;
+  assert.deepEqual([withNoShow.totals.scheduled,withNoShow.totals.scheduled_to_date,withNoShow.totals.no_show,withNoShow.totals.pending,withNoShow.totals.upcoming],[5,4,1,0,1]);
+  assert.equal(withNoShow.top_no_show[0].no_show_percent,25);
+  assert.equal(withNoShow.days[1].no_show,1);
+  assert.equal(withNoShow.slots.find(row=>row.slot==='08:00').no_show,1);
   console.log('PASS: CD registra chegadas, perfis isolados e atrasos consolidados por data');
 }finally{
   delete process.env.FLV_TEST_NOW;

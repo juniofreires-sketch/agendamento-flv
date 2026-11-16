@@ -207,25 +207,33 @@ async function renderArrivalPerformance(requestId){
     if(requestId!==state.dashRequest||state.view!=='dashboard'||state.dashboardTab!=='arrivals')return;
     const totals=result.totals||{};
     const scheduled=Number(totals.scheduled||0),recorded=Number(totals.recorded||0),late=Number(totals.late||0);
+    const noShow=Number(totals.no_show||0),scheduledToDate=Number(totals.scheduled_to_date||0);
+    const noShowPercent=scheduledToDate?formatWeight(noShow/scheduledToDate*100)+'%':'—';
     const early=Number(totals.early||0),onTime=Number(totals.on_time||0),pending=Number(totals.pending||0),upcoming=Number(totals.upcoming||0);
     const punctuality=recorded?Math.round((early+onTime)/recorded*100)+'%':'—';
     const metrics=[
       ['Agendamentos',formatNum(scheduled),'carros',''],
       ['Chegadas registradas',formatNum(recorded),'carros',''],
       ['No horário ou antes',formatNum(early+onTime),'chegadas','good'],
-      ['Chegadas atrasadas',formatNum(late),'chegadas','late']
+      ['Chegadas atrasadas',formatNum(late),'chegadas','late'],
+      ['No show',formatNum(noShow),'ausências','no-show']
     ];
     const cards=metrics.map(([label,value,unit,tone])=>'<div class="card cd-metric '+tone+'"><span>'+label+'</span><strong>'+value+'</strong><small>'+unit+'</small></div>').join('');
     const top=result.top_suppliers||[];
     state.delaySuppliers=top;
     state.delayFrom=state.dashFrom;state.delayTo=state.dashTo;
     const topTable=top.length?'<div class="table-wrap"><table class="data-table cd-performance-table"><thead><tr><th>Fornecedor</th><th>Dias com atraso</th><th>Chegadas atrasadas</th><th>Tempo perdido</th><th>Média por atraso</th></tr></thead><tbody>'+top.map((row,index)=>'<tr><td><button class="delay-supplier-link" type="button" data-performance-supplier="'+index+'">'+esc(row.supplier_name)+'</button></td><td>'+formatNum(row.late_days)+'</td><td>'+formatNum(row.late)+'</td><td><strong class="negative-time">'+negativeDelay(row.late_minutes)+'</strong></td><td><strong class="negative-time">'+negativeDelay(row.average_late_minutes)+'</strong></td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state"><strong>Nenhum atraso registrado no período.</strong><span>Os fornecedores aparecerão aqui quando houver chegadas após o horário agendado.</span></div>';
+    const noShowRows=result.top_no_show||[];
+    const noShowTable=noShowRows.length?'<div class="table-wrap"><table class="data-table cd-performance-table"><thead><tr><th>Fornecedor</th><th>No show</th><th>Agendados até hoje</th><th>Percentual</th></tr></thead><tbody>'+noShowRows.map(row=>'<tr><td><strong>'+esc(row.supplier_name)+'</strong></td><td><strong class="no-show-value">'+formatNum(row.no_show)+'</strong></td><td>'+formatNum(row.scheduled_to_date)+'</td><td><strong class="no-show-value">'+formatWeight(row.no_show_percent)+'%</strong></td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state"><strong>Nenhum No show no período.</strong><span>As ausências registradas na Chegada CD aparecerão aqui.</span></div>';
     const days=result.days||[];
     const dailyMax=Math.max(1,...days.map(row=>Number(row.scheduled||0)));
-    const daily=days.length?'<div class="cd-daily-list">'+days.map(row=>'<div class="cd-daily-row"><span>'+dateBR(row.day)+'</span><div class="cd-daily-track"><i style="width:'+(Number(row.recorded||0)/dailyMax*100)+'%"></i></div><span>'+formatNum(row.recorded)+' / '+formatNum(row.scheduled)+' chegadas</span><strong class="'+(Number(row.late)>0?'negative-time':'')+'">'+(Number(row.late)>0?formatNum(row.late)+' atraso(s) · '+negativeDelay(row.late_minutes):'Sem atraso')+'</strong></div>').join('')+'</div>':'<div class="empty-state">Nenhum agendamento no período selecionado.</div>';
+    const daily=days.length?'<div class="cd-daily-list">'+days.map(row=>'<div class="cd-daily-row"><span>'+dateBR(row.day)+'</span><div class="cd-daily-track"><i style="width:'+(Number(row.recorded||0)/dailyMax*100)+'%"></i></div><span>'+formatNum(row.recorded)+' / '+formatNum(row.scheduled)+' chegadas</span><div class="cd-day-results"><strong class="'+(Number(row.late)>0?'negative-time':'')+'">'+(Number(row.late)>0?formatNum(row.late)+' atraso(s) · '+negativeDelay(row.late_minutes):'Sem atraso')+'</strong><small class="no-show-value">'+formatNum(row.no_show)+' No show</small></div></div>').join('')+'</div>':'<div class="empty-state">Nenhum agendamento no período selecionado.</div>';
     const slots=result.slots||[];
-    const slotTable=slots.length?'<div class="table-wrap"><table class="data-table cd-performance-table"><thead><tr><th>Horário</th><th>Agendados</th><th>Chegadas</th><th>Atrasos</th><th>Tempo perdido</th></tr></thead><tbody>'+slots.map(row=>'<tr><td><strong>'+esc(String(row.slot).slice(0,5))+'</strong></td><td>'+formatNum(row.scheduled)+'</td><td>'+formatNum(row.recorded)+'</td><td>'+formatNum(row.late)+'</td><td class="'+(Number(row.late)>0?'negative-time':'')+'">'+(Number(row.late)>0?negativeDelay(row.late_minutes):'—')+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state">Nenhum horário agendado neste período.</div>';
-    $('#dashBody').innerHTML='<div class="cd-metrics">'+cards+'</div><div class="cd-status-strip card"><div><strong>'+punctuality+'</strong><span>Pontualidade: '+formatNum(onTime)+' no horário · '+formatNum(early)+' adiantadas</span></div><div><strong>'+formatNum(pending)+'</strong><span>Aguardando registro até hoje</span></div><div><strong>'+formatNum(upcoming)+'</strong><span>Agendamentos futuros</span></div><div><strong class="negative-time">'+(late?negativeDelay(totals.average_late_minutes):'—')+'</strong><span>Atraso médio por chegada atrasada</span></div></div><div class="card section-card cd-section"><div class="section-head"><div><h3>Fornecedores com mais atrasos</h3><p>Ranking por número de chegadas atrasadas. Clique no fornecedor para ver cada data.</p></div></div>'+topTable+'</div><div class="cd-analytics-grid"><div class="card section-card cd-section"><div class="section-head"><div><h3>Chegadas por data</h3><p>Registradas em relação aos agendamentos do período.</p></div></div>'+daily+'</div><div class="card section-card cd-section"><div class="section-head"><div><h3>Atrasos por horário agendado</h3><p>Compare os horários com mais ocorrências.</p></div></div>'+slotTable+'</div></div><p class="cd-panel-note">Tempo negativo em vermelho indica chegada após o horário agendado. Chegadas sem registro não entram na taxa de pontualidade.</p>';
+    const slotTable=slots.length?'<div class="table-wrap"><table class="data-table cd-performance-table"><thead><tr><th>Horário</th><th>Agendados</th><th>Chegadas</th><th>Atrasos</th><th>No show</th><th>Tempo perdido</th></tr></thead><tbody>'+slots.map(row=>'<tr><td><strong>'+esc(String(row.slot).slice(0,5))+'</strong></td><td>'+formatNum(row.scheduled)+'</td><td>'+formatNum(row.recorded)+'</td><td>'+formatNum(row.late)+'</td><td class="no-show-value">'+formatNum(row.no_show)+'</td><td class="'+(Number(row.late)>0?'negative-time':'')+'">'+(Number(row.late)>0?negativeDelay(row.late_minutes):'—')+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state">Nenhum horário agendado neste período.</div>';
+    $('#dashBody').innerHTML='<div class="cd-metrics">'+cards+'</div>'+
+      '<div class="cd-status-strip card"><div><strong>'+punctuality+'</strong><span>Pontualidade: '+formatNum(onTime)+' no horário · '+formatNum(early)+' adiantadas</span></div><div><strong class="no-show-value">'+noShowPercent+'</strong><span>No show entre agendamentos até hoje</span></div><div><strong>'+formatNum(pending)+'</strong><span>Aguardando registro até hoje</span></div><div><strong>'+formatNum(upcoming)+'</strong><span>Agendamentos futuros</span></div><div><strong class="negative-time">'+(late?negativeDelay(totals.average_late_minutes):'—')+'</strong><span>Atraso médio por chegada atrasada</span></div></div>'+
+      '<div class="cd-analytics-grid"><div class="card section-card cd-section"><div class="section-head"><div><h3>Fornecedores com mais atrasos</h3><p>Clique no nome para ver cada data.</p></div></div>'+topTable+'</div><div class="card section-card cd-section"><div class="section-head"><div><h3>Fornecedores com mais No show</h3><p>Ausências registradas e percentual sobre agendamentos até hoje.</p></div></div>'+noShowTable+'</div></div>'+
+      '<div class="cd-analytics-grid"><div class="card section-card cd-section"><div class="section-head"><div><h3>Chegadas por data</h3><p>Registradas em relação aos agendamentos do período.</p></div></div>'+daily+'</div><div class="card section-card cd-section"><div class="section-head"><div><h3>Atrasos e No show por horário</h3><p>Compare os horários com mais ocorrências.</p></div></div>'+slotTable+'</div></div><p class="cd-panel-note">No show é calculado sobre os agendamentos até hoje no período; agendamentos futuros ficam fora do percentual. Tempo negativo em vermelho indica chegada após o horário agendado.</p>';
   }catch(error){if(requestId!==state.dashRequest)return;$('#dashBody').innerHTML='<div class="empty-state">'+esc(error.message)+'</div>';toast(error.message,true)}
 }
 const dashboardDayPageSize=12;
@@ -259,10 +267,11 @@ function printDashboardDay(){
 }
 window.addEventListener('afterprint',()=>{document.body.classList.remove('printing-agenda');$('#agendaPrint').replaceChildren()});
 const minutesOfTime=value=>Number(String(value).slice(0,2))*60+Number(String(value).slice(3,5));
+const currentLocalTime=()=>new Intl.DateTimeFormat('en-GB',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date());
 const durationLabel=value=>{const minutes=Math.round(Number(value)||0);return minutes>=60?Math.floor(minutes/60)+'h '+String(minutes%60).padStart(2,'0')+'min':minutes+' min'};
 async function renderArrivals(){
   $('#viewContent').innerHTML=pageHead('RECEBIMENTO','Chegada CD','Registre a chegada dos veículos agendados na portaria.')+
-    '<div class="card section-card arrival-card"><div class="arrival-heading"><div class="field"><label for="arrivalDay">Data da entrega</label><input id="arrivalDay" type="date" value="'+esc(state.arrivalDay)+'"></div><p>Selecione a data para consultar os agendamentos. O horário de chegada pode ser registrado no dia da entrega ou depois.</p></div><div class="tabs arrival-tabs"><button type="button" data-arrival-tab="pending">Aguardando chegada <span id="arrivalPendingCount"></span></button><button type="button" data-arrival-tab="recorded">Chegada registrada <span id="arrivalRecordedCount"></span></button></div><div id="arrivalBody" class="empty-state">Carregando agendamentos...</div></div>';
+    '<div class="card section-card arrival-card"><div class="arrival-heading"><div class="field"><label for="arrivalDay">Data da entrega</label><input id="arrivalDay" type="date" value="'+esc(state.arrivalDay)+'"></div><p>Selecione a data para consultar os agendamentos. O horário de chegada pode ser registrado no dia da entrega ou depois.</p></div><div class="tabs arrival-tabs"><button type="button" data-arrival-tab="pending">Aguardando chegada <span id="arrivalPendingCount"></span></button><button type="button" data-arrival-tab="recorded">Chegada registrada <span id="arrivalRecordedCount"></span></button><button type="button" data-arrival-tab="no_show">No show <span id="arrivalNoShowCount"></span></button></div><div id="arrivalBody" class="empty-state">Carregando agendamentos...</div></div>';
   await refreshArrivals();
 }
 async function refreshArrivals(){
@@ -276,15 +285,27 @@ async function refreshArrivals(){
   }catch(error){if(request!==state.arrivalRequest)return;$('#arrivalBody').innerHTML='<div class="empty-state">'+esc(error.message)+'</div>'}
 }
 function renderArrivalTab(){
-  const pending=state.arrivals.filter(row=>!row.arrival_time),recorded=state.arrivals.filter(row=>row.arrival_time);
+  const pending=state.arrivals.filter(row=>row.status==='active'&&!row.arrival_time);
+  const recorded=state.arrivals.filter(row=>row.status==='active'&&row.arrival_time);
+  const noShow=state.arrivals.filter(row=>row.status==='no_show');
   $('#arrivalPendingCount').textContent='('+formatNum(pending.length)+')';
   $('#arrivalRecordedCount').textContent='('+formatNum(recorded.length)+')';
+  $('#arrivalNoShowCount').textContent='('+formatNum(noShow.length)+')';
   document.querySelectorAll('[data-arrival-tab]').forEach(button=>button.classList.toggle('active',button.dataset.arrivalTab===state.arrivalTab));
-  const rows=state.arrivalTab==='pending'?pending:recorded;
-  const future=state.arrivalDay>today();
-  $('#arrivalBody').innerHTML=rows.length?'<div class="table-wrap"><table class="data-table arrival-table"><thead><tr><th>Senha / horário</th><th>Fornecedor</th><th>Pedido / nota fiscal</th><th>Carga agendada</th><th>Veículo / tipo</th><th>Horário chegada</th></tr></thead><tbody>'+
-    rows.map(row=>{const id=Number(row.booking_id||row.id),delay=row.arrival_time?minutesOfTime(row.arrival_time)-minutesOfTime(row.slot):null;
-      return '<tr><td><span class="cell-title">#'+String(id).padStart(3,'0')+'</span><span class="cell-sub">'+esc(String(row.slot).slice(0,5))+'</span></td><td><span class="cell-title">'+esc(row.supplier_name)+'</span></td><td>'+esc(row.order_number||'—')+'<span class="cell-sub">NF: '+esc(row.invoice_number||'—')+'</span></td><td><span class="cell-title">'+formatWeight(row.weight_kg)+' kg</span><span class="cell-sub">'+formatNum(row.box_count)+' caixas · '+formatNum(row.item_count)+' itens</span></td><td>'+esc(row.vehicle_type)+'<span class="cell-sub">'+esc(row.cargo_type)+'</span></td><td><form class="arrival-form" data-arrival-form="'+id+'"><label class="sr-only" for="arrivalTime-'+id+'">Horário de chegada de '+esc(row.supplier_name)+'</label><input id="arrivalTime-'+id+'" type="time" name="arrival_time" value="'+esc(row.arrival_time?String(row.arrival_time).slice(0,5):'')+'" required'+(future?' disabled':'')+'><button class="btn btn-primary" type="submit"'+(future?' disabled':'')+'>'+(row.arrival_time?'Atualizar':'Registrar')+'</button></form>'+(delay===null?'':('<small class="arrival-indicator '+(delay>0?'late':'on-time')+'">'+(delay>0?'Atraso de '+durationLabel(delay):'No horário')+'</small>'))+'</td></tr>'}).join('')+'</tbody></table></div>':'<div class="empty-state"><strong>'+(state.arrivalTab==='pending'?'Nenhuma chegada pendente nesta data.':'Nenhuma chegada registrada nesta data.')+'</strong></div>';
+  const rows=state.arrivalTab==='pending'?pending:state.arrivalTab==='recorded'?recorded:noShow;
+  const future=state.arrivalDay>today(),localTime=currentLocalTime();
+  const emptyMessage={pending:'Nenhuma chegada pendente nesta data.',recorded:'Nenhuma chegada registrada nesta data.',no_show:'Nenhum No show nesta data.'};
+  $('#arrivalBody').innerHTML=rows.length?'<div class="table-wrap"><table class="data-table arrival-table"><thead><tr><th>Senha / horário</th><th>Fornecedor</th><th>Pedido / nota fiscal</th><th>Carga agendada</th><th>Veículo / tipo</th><th>Chegada / situação</th></tr></thead><tbody>'+
+    rows.map(row=>{
+      const id=Number(row.booking_id||row.id),slot=String(row.slot).slice(0,5);
+      const delay=row.arrival_time?minutesOfTime(row.arrival_time)-minutesOfTime(row.slot):null;
+      const canNoShow=!future&&(state.arrivalDay<today()||slot<=localTime);
+      const arrivalControl=row.status==='no_show'?'<span class="badge no_show">No show</span>':
+        '<div class="arrival-actions"><form class="arrival-form" data-arrival-form="'+id+'"><label class="sr-only" for="arrivalTime-'+id+'">Horário de chegada de '+esc(row.supplier_name)+'</label><input id="arrivalTime-'+id+'" type="time" name="arrival_time" value="'+esc(row.arrival_time?String(row.arrival_time).slice(0,5):'')+'" required'+(future?' disabled':'')+'><button class="btn btn-primary" type="submit"'+(future?' disabled':'')+'>'+(row.arrival_time?'Atualizar':'Registrar')+'</button></form>'+
+        (row.arrival_time?'':'<button class="btn btn-no-show" type="button" data-arrival-no-show="'+id+'"'+(canNoShow?'':' disabled title="Disponível após o horário agendado"')+'>No show</button>')+'</div>'+
+        (delay===null?'':'<small class="arrival-indicator '+(delay>0?'late':'on-time')+'">'+(delay>0?'Atraso de '+durationLabel(delay):'No horário')+'</small>');
+      return '<tr><td><span class="cell-title">#'+String(id).padStart(3,'0')+'</span><span class="cell-sub">'+esc(slot)+'</span></td><td><span class="cell-title">'+esc(row.supplier_name)+'</span></td><td>'+esc(row.order_number||'—')+'<span class="cell-sub">NF: '+esc(row.invoice_number||'—')+'</span></td><td><span class="cell-title">'+formatWeight(row.weight_kg)+' kg</span><span class="cell-sub">'+formatNum(row.box_count)+' caixas · '+formatNum(row.item_count)+' itens</span></td><td>'+esc(row.vehicle_type)+'<span class="cell-sub">'+esc(row.cargo_type)+'</span></td><td>'+arrivalControl+'</td></tr>';
+    }).join('')+'</tbody></table></div>':'<div class="empty-state"><strong>'+emptyMessage[state.arrivalTab]+'</strong></div>';
 }
 function closeDelayModal(){state.delayRequest++;state.delayDetailRequest++;$('#delayDetailModal').classList.add('hidden');$('#delayModal').classList.add('hidden')}
 async function openDelayModal(){
@@ -558,6 +579,13 @@ document.addEventListener('click',async e=>{
   const delaySupplier=e.target.closest('[data-delay-index]');if(delaySupplier){openDelayDetail(Number(delaySupplier.dataset.delayIndex));return}
   const performanceSupplier=e.target.closest('[data-performance-supplier]');if(performanceSupplier){openDelayDetail(Number(performanceSupplier.dataset.performanceSupplier));return}
   const arrivalTab=e.target.closest('[data-arrival-tab]');if(arrivalTab){state.arrivalTab=arrivalTab.dataset.arrivalTab;renderArrivalTab();return}
+  const arrivalNoShow=e.target.closest('[data-arrival-no-show]');
+  if(arrivalNoShow){
+    if(!confirm('Confirmar No show? Este fornecedor não terá horário de chegada registrado para o agendamento.'))return;
+    try{await api('/api/arrivals/'+arrivalNoShow.dataset.arrivalNoShow+'/no-show','POST',{});toast('Agendamento marcado como No show.');await refreshArrivals()}
+    catch(error){toast(error.message,true)}
+    return;
+  }
   const dailySummary=e.target.closest('[data-dashboard-day]');if(dailySummary){openDashboardDayModal(dailySummary.dataset.dashboardDay);return}
   const dashboardPage=e.target.closest('[data-dashboard-page]');if(dashboardPage){state.dashboardDayPage=Number(dashboardPage.dataset.dashboardPage);renderDashboardDayPage();return}
   const bookingSlot=e.target.closest('[data-booking-slot]');

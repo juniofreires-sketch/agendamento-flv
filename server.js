@@ -319,36 +319,44 @@ const server = http.createServer(async (req,res) => {
       if(!isValidDay(from)||!isValidDay(to)||from>to)return fail(res,400,'Período inválido.');
       const supplierId=Number(url.searchParams.get('supplier_id')||0);
       if(supplierId&&user.role!=='admin')return fail(res,403,'Apenas administradores podem filtrar por fornecedor.');
-      const rows=db.prepare(`SELECT b.day,b.slot,b.supplier_id,s.name AS supplier_name,a.arrival_time
+      const rows=db.prepare(`SELECT b.day,b.slot,b.status,b.supplier_id,s.name AS supplier_name,a.arrival_time
         FROM bookings b JOIN suppliers s ON s.id=b.supplier_id
         LEFT JOIN booking_arrivals a ON a.booking_id=b.id
-        WHERE b.status='active' AND b.day BETWEEN ? AND ? AND (?=0 OR b.supplier_id=?)
+        WHERE b.status IN ('active','no_show') AND b.day BETWEEN ? AND ? AND (?=0 OR b.supplier_id=?)
         ORDER BY b.day,b.slot,b.id`).all(from,to,supplierId,supplierId);
-      const totals={scheduled:0,recorded:0,late:0,early:0,on_time:0,pending:0,upcoming:0,late_minutes:0,average_late_minutes:0};
+      const totals={scheduled:0,scheduled_to_date:0,recorded:0,no_show:0,late:0,early:0,on_time:0,pending:0,upcoming:0,late_minutes:0,average_late_minutes:0};
       const days=new Map(),suppliers=new Map(),slots=new Map(),today=nowParts().day;
       for(const row of rows){
         const difference=row.arrival_time
           ? Number(row.arrival_time.slice(0,2))*60+Number(row.arrival_time.slice(3,5))-Number(row.slot.slice(0,2))*60-Number(row.slot.slice(3,5))
           : null;
         const late=Math.max(0,difference||0),recorded=difference!==null;
-        totals.scheduled++;if(recorded)totals.recorded++;
+        totals.scheduled++;if(row.day<=today)totals.scheduled_to_date++;
+        if(recorded)totals.recorded++;
+        if(row.status==='no_show')totals.no_show++;
         if(difference>0)totals.late++;else if(difference<0)totals.early++;else if(recorded)totals.on_time++;
-        if(!recorded)totals[row.day<=today?'pending':'upcoming']++;
+        if(!recorded&&row.status==='active')totals[row.day<=today?'pending':'upcoming']++;
         totals.late_minutes+=late;
-        if(!days.has(row.day))days.set(row.day,{day:row.day,scheduled:0,recorded:0,late:0,on_time_or_early:0,pending:0,late_minutes:0});
-        if(!suppliers.has(row.supplier_id))suppliers.set(row.supplier_id,{supplier_id:row.supplier_id,supplier_name:row.supplier_name,scheduled:0,recorded:0,late:0,late_days:new Set(),late_minutes:0,average_late_minutes:0});
-        if(!slots.has(row.slot))slots.set(row.slot,{slot:row.slot,scheduled:0,recorded:0,late:0,late_minutes:0});
+        if(!days.has(row.day))days.set(row.day,{day:row.day,scheduled:0,recorded:0,no_show:0,late:0,on_time_or_early:0,pending:0,late_minutes:0});
+        if(!suppliers.has(row.supplier_id))suppliers.set(row.supplier_id,{supplier_id:row.supplier_id,supplier_name:row.supplier_name,scheduled:0,scheduled_to_date:0,recorded:0,no_show:0,late:0,late_days:new Set(),late_minutes:0,average_late_minutes:0});
+        if(!slots.has(row.slot))slots.set(row.slot,{slot:row.slot,scheduled:0,recorded:0,no_show:0,late:0,late_minutes:0});
         const day=days.get(row.day),supplier=suppliers.get(row.supplier_id),slot=slots.get(row.slot);
-        for(const item of [day,supplier,slot]){item.scheduled++;if(recorded)item.recorded++;if(late){item.late++;item.late_minutes+=late}}
+        for(const item of [day,supplier,slot]){item.scheduled++;if(recorded)item.recorded++;if(row.status==='no_show')item.no_show++;if(late){item.late++;item.late_minutes+=late}}
+        if(row.day<=today)supplier.scheduled_to_date++;
         if(late)supplier.late_days.add(row.day);
         if(recorded&&difference<=0)day.on_time_or_early++;
-        if(!recorded&&row.day<=today)day.pending++;
+        if(!recorded&&row.status==='active'&&row.day<=today)day.pending++;
       }
       totals.average_late_minutes=totals.late?Math.round(totals.late_minutes/totals.late*10)/10:0;
       const top_suppliers=Array.from(suppliers.values()).filter(item=>item.late).map(item=>({
         ...item,late_days:item.late_days.size,average_late_minutes:Math.round(item.late_minutes/item.late*10)/10
       })).sort((a,b)=>b.late-a.late||b.late_minutes-a.late_minutes||a.supplier_name.localeCompare(b.supplier_name,'pt-BR')).slice(0,10);
-      return json(res,200,{totals,days:Array.from(days.values()).sort((a,b)=>a.day.localeCompare(b.day)),top_suppliers,
+      const top_no_show=Array.from(suppliers.values()).filter(item=>item.no_show).map(item=>({
+        supplier_id:item.supplier_id,supplier_name:item.supplier_name,no_show:item.no_show,
+        scheduled_to_date:item.scheduled_to_date,
+        no_show_percent:Math.round(item.no_show/item.scheduled_to_date*1000)/10
+      })).sort((a,b)=>b.no_show-a.no_show||a.supplier_name.localeCompare(b.supplier_name,'pt-BR')).slice(0,10);
+      return json(res,200,{totals,days:Array.from(days.values()).sort((a,b)=>a.day.localeCompare(b.day)),top_suppliers,top_no_show,
         slots:Array.from(slots.values()).sort((a,b)=>a.slot.localeCompare(b.slot))});
     }
     if (req.method === 'GET' && p === '/api/arrivals') {
@@ -356,8 +364,22 @@ const server = http.createServer(async (req,res) => {
       if(!['admin','cd'].includes(user.role))return fail(res,403,'Apenas CD e administradores podem consultar chegadas.');
       const day=url.searchParams.get('day')||nowParts().day;
       if(!isValidDay(day))return fail(res,400,'Informe uma data válida.');
-      const rows=db.prepare(`SELECT b.*,s.name AS supplier_name,a.arrival_time,a.recorded_at FROM bookings b JOIN suppliers s ON s.id=b.supplier_id LEFT JOIN booking_arrivals a ON a.booking_id=b.id WHERE b.day=? AND b.status='active' ORDER BY b.slot,s.name,b.id`).all(day);
+      const rows=db.prepare(`SELECT b.*,s.name AS supplier_name,a.arrival_time,a.recorded_at FROM bookings b JOIN suppliers s ON s.id=b.supplier_id LEFT JOIN booking_arrivals a ON a.booking_id=b.id WHERE b.day=? AND b.status IN ('active','no_show') ORDER BY b.slot,s.name,b.id`).all(day);
       return json(res,200,{bookings:rows.map(row=>({...bookingRow(row),booking_id:row.id,arrival_time:row.arrival_time||null,recorded_at:row.recorded_at||null}))});
+    }
+    const arrivalNoShow=/^\/api\/arrivals\/(\d+)\/no-show$/.exec(p);
+    if(req.method==='POST'&&arrivalNoShow){
+      const user=requireUser(req,res);if(!user)return;
+      if(!['admin','cd'].includes(user.role))return fail(res,403,'Apenas CD e administradores podem marcar No show.');
+      const id=Number(arrivalNoShow[1]);
+      const booking=db.prepare('SELECT day,slot,status FROM bookings WHERE id=?').get(id);
+      if(!booking)return fail(res,404,'Agendamento não encontrado.');
+      if(booking.status!=='active')return fail(res,409,'Somente agendamentos confirmados podem ser marcados No show.');
+      const now=nowParts();
+      if(booking.day>now.day||(booking.day===now.day&&booking.slot>now.time))return fail(res,400,'No show só pode ser registrado após o horário agendado.');
+      if(db.prepare('SELECT 1 FROM booking_arrivals WHERE booking_id=?').get(id))return fail(res,409,'Este fornecedor já possui horário de chegada registrado.');
+      db.prepare("UPDATE bookings SET status='no_show',no_show_at=CURRENT_TIMESTAMP WHERE id=?").run(id);
+      return json(res,200,{ok:true});
     }
     const arrivalMatch=/^\/api\/arrivals\/(\d+)$/.exec(p);
     if (req.method === 'POST' && arrivalMatch) {
@@ -418,7 +440,9 @@ const server = http.createServer(async (req,res) => {
       const b = db.prepare('SELECT * FROM bookings WHERE id=?').get(Number(match[1]));
       if (!b) return fail(res,404,'Agendamento não encontrado.');
       if (b.status !== 'active') return fail(res,409,'Somente agendamentos confirmados podem ser marcados como No show.');
-      if (b.day > nowParts().day) return fail(res,400,'O status No show só pode ser registrado no dia do agendamento ou depois.');
+      const now=nowParts();
+      if (b.day > now.day || (b.day===now.day && b.slot>now.time)) return fail(res,400,'No show só pode ser registrado após o horário agendado.');
+      if (db.prepare('SELECT 1 FROM booking_arrivals WHERE booking_id=?').get(b.id)) return fail(res,409,'Este fornecedor já possui horário de chegada registrado.');
       db.prepare("UPDATE bookings SET status='no_show',no_show_at=CURRENT_TIMESTAMP WHERE id=?").run(b.id);
       return sendBooking(res,b.id,user);
     }

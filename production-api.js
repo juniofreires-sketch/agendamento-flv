@@ -138,8 +138,15 @@ export async function api(path,method='GET',body){
     if(!profile||profile.status!=='active'||!['admin','cd'].includes(profile.role))throw new Error('Apenas CD e administradores podem consultar chegadas.');
     const day=url.searchParams.get('day')||localParts().day;
     if(!/^\d{4}-\d{2}-\d{2}$/.test(day))throw new Error('Informe uma data válida.');
-    const {data,error}=await supabase.rpc('cd_arrival_bookings',{p_day:day});fail(error);
+    const {data,error}=await supabase.rpc('cd_arrival_bookings_with_status',{p_day:day});fail(error);
     return {bookings:(data||[]).map(row=>({...row,slot:String(row.slot).slice(0,5),arrival_time:row.arrival_time?String(row.arrival_time).slice(0,5):null}))};
+  }
+  const arrivalNoShow=/^\/api\/arrivals\/(\d+)\/no-show$/.exec(p);
+  if(arrivalNoShow&&method==='POST'){
+    const profile=await signedInProfile();
+    if(!profile||profile.status!=='active'||!['admin','cd'].includes(profile.role))throw new Error('Apenas CD e administradores podem marcar No show.');
+    const {error}=await supabase.rpc('mark_cd_booking_no_show',{p_booking_id:Number(arrivalNoShow[1])});
+    fail(error);return {ok:true};
   }
   const arrival=/^\/api\/arrivals\/(\d+)$/.exec(p);
   if(arrival&&method==='POST'){
