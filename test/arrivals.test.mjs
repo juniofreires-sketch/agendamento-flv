@@ -52,6 +52,9 @@ try{
   process.env.FLV_TEST_NOW=day2+'T18:00:00Z';
   assert.equal((await call('POST','/api/arrivals/'+futureId+'/no-show',{},cdCookie)).status,400);
   assert.equal((await call('POST','/api/arrivals/'+ids[0],{arrival_time:'05:30'},supplierCookie)).status,403);
+  assert.equal((await call('POST','/api/arrivals/'+ids[0],{arrival_time:''},cdCookie)).status,400);
+  assert.equal((await call('POST','/api/arrivals/'+ids[0],{},cdCookie)).status,400);
+  assert.equal((await call('GET','/api/arrivals?day='+day1,undefined,cdCookie)).data.bookings[0].arrival_time,null);
   for(const [id,time] of [[ids[0],'05:30'],[ids[1],'06:15'],[ids[2],'07:45']]){
     assert.equal((await call('POST','/api/arrivals/'+id,{arrival_time:time},cdCookie)).status,200);
   }

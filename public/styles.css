@@ -160,6 +160,13 @@ h1,h2,h3,.stat-value,.side-brand strong,.ticket-number{font-family:Inter,Arial,s
 .supplier-mode-toggle{padding:0 0 13px;text-align:left;font-size:12px}
 .requested-tag{color:#2b7fff!important;font-weight:700}
 .users-card,.my-bookings{margin-top:22px}
+.user-filters{display:flex;align-items:end;gap:12px;flex-wrap:wrap;padding:4px 0 14px;border-bottom:1px solid #e7edf6;margin-bottom:4px}
+.user-search{position:relative;display:flex;align-items:center;flex:1 1 310px;max-width:530px}
+.user-search svg{position:absolute;left:13px;width:19px;height:19px;color:#6380a6;pointer-events:none}
+.user-search input,.user-role-filter select{height:43px;border:1px solid #cbdcf3;border-radius:9px;background:#fff;color:#163457;font:inherit;font-size:13px;outline:none}
+.user-search input{width:100%;padding:10px 14px 10px 42px}.user-search input:focus,.user-role-filter select:focus{border-color:#2b7fff;box-shadow:0 0 0 3px #e0edff}
+.user-role-filter{display:grid;gap:5px;min-width:170px}.user-role-filter span{font-size:11px;font-weight:700;color:#516a8c}.user-role-filter select{padding:9px 30px 9px 11px}
+.user-search-count{margin-left:auto;padding-bottom:12px;color:#6880a0;font-size:12px;white-space:nowrap}
 .user-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
 .approval-actions{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap}
 .approval-actions select{min-height:42px;padding:9px 32px 9px 12px;border:1px solid #d7e2f1;border-radius:9px;background:#fff;color:#233b5e;font:inherit;font-size:12px;font-weight:700}
@@ -277,4 +284,5 @@ h1,h2,h3,.stat-value,.side-brand strong,.ticket-number{font-family:Inter,Arial,s
 .notification-all{display:block;width:100%;margin-top:11px;padding:9px;border:1px solid #cbdcf3;border-radius:8px;background:#f7faff;color:#176bdb;font-weight:800;font-size:12px}
 .notification-all:hover{background:#eaf2ff}
 @media(max-width:720px){.notification-panel{right:-54px}.notification-bell{width:38px;height:38px}.top-actions{gap:9px}}
+@media(max-width:720px){.user-search{max-width:none;flex-basis:100%}.user-role-filter{flex:1}.user-search-count{padding-bottom:10px}}
 @media print{#notificationArea{display:none!important}}

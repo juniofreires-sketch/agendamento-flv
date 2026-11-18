@@ -8,7 +8,7 @@ const api = async (url, method='GET', body) => {
   if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a operação.');
   return data;
 };
-const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardTab:'general',dashboardSupplierRows:[],dashboardDay:'',dashboardDayPage:0,arrivalDay:'',arrivalTab:'pending',arrivals:[],arrivalRequest:0,delayFrom:'',delayTo:'',delaySuppliers:[],delayRequest:0,delayDetailRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],availabilityRequest:0,bookings:[],pending:[],adminUsers:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
+const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardTab:'general',dashboardSupplierRows:[],dashboardDay:'',dashboardDayPage:0,arrivalDay:'',arrivalTab:'pending',arrivals:[],arrivalRequest:0,delayFrom:'',delayTo:'',delaySuppliers:[],delayRequest:0,delayDetailRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],availabilityRequest:0,bookings:[],pending:[],adminUsers:[],userSearch:'',userRoleFilter:'',editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
 let notificationTimer;
 const notificationStorageKey = id => 'flv-notifications-seen:'+id;
 function renderNotifications(){
@@ -301,11 +301,17 @@ function renderArrivalTab(){
       const delay=row.arrival_time?minutesOfTime(row.arrival_time)-minutesOfTime(row.slot):null;
       const canNoShow=!future&&(state.arrivalDay<today()||slot<=localTime);
       const arrivalControl=row.status==='no_show'?'<span class="badge no_show">No show</span>':
-        '<div class="arrival-actions"><form class="arrival-form" data-arrival-form="'+id+'"><label class="sr-only" for="arrivalTime-'+id+'">Horário de chegada de '+esc(row.supplier_name)+'</label><input id="arrivalTime-'+id+'" type="time" name="arrival_time" value="'+esc(row.arrival_time?String(row.arrival_time).slice(0,5):'')+'" required'+(future?' disabled':'')+'><button class="btn btn-primary" type="submit"'+(future?' disabled':'')+'>'+(row.arrival_time?'Atualizar':'Registrar')+'</button></form>'+
+        '<div class="arrival-actions"><form class="arrival-form" data-arrival-form="'+id+'"><label class="sr-only" for="arrivalTime-'+id+'">Horário de chegada de '+esc(row.supplier_name)+'</label><input id="arrivalTime-'+id+'" type="time" name="arrival_time" value="'+esc(row.arrival_time?String(row.arrival_time).slice(0,5):'')+'" required'+(future?' disabled':'')+'><button class="btn btn-primary" type="submit"'+(future||!row.arrival_time?' disabled title="Informe o horário de chegada"':'')+'>'+(row.arrival_time?'Atualizar':'Registrar')+'</button></form>'+
         (row.arrival_time?'':'<button class="btn btn-no-show" type="button" data-arrival-no-show="'+id+'"'+(canNoShow?'':' disabled title="Disponível após o horário agendado"')+'>No show</button>')+'</div>'+
         (delay===null?'':'<small class="arrival-indicator '+(delay>0?'late':'on-time')+'">'+(delay>0?'Atraso de '+durationLabel(delay):'No horário')+'</small>');
       return '<tr><td><span class="cell-title">#'+String(id).padStart(3,'0')+'</span><span class="cell-sub">'+esc(slot)+'</span></td><td><span class="cell-title">'+esc(row.supplier_name)+'</span></td><td>'+esc(row.order_number||'—')+'<span class="cell-sub">NF: '+esc(row.invoice_number||'—')+'</span></td><td><span class="cell-title">'+formatWeight(row.weight_kg)+' kg</span><span class="cell-sub">'+formatNum(row.box_count)+' caixas · '+formatNum(row.item_count)+' itens</span></td><td>'+esc(row.vehicle_type)+'<span class="cell-sub">'+esc(row.cargo_type)+'</span></td><td>'+arrivalControl+'</td></tr>';
     }).join('')+'</tbody></table></div>':'<div class="empty-state"><strong>'+emptyMessage[state.arrivalTab]+'</strong></div>';
+}
+function updateArrivalSubmit(input){
+  const button=input.closest('form[data-arrival-form]')?.querySelector('button[type="submit"]');
+  if(!button)return;
+  button.disabled=input.disabled||!input.value||!input.validity.valid;
+  button.title=button.disabled?'Informe o horário de chegada':'';
 }
 function closeDelayModal(){state.delayRequest++;state.delayDetailRequest++;$('#delayDetailModal').classList.add('hidden');$('#delayModal').classList.add('hidden')}
 async function openDelayModal(){
@@ -431,7 +437,9 @@ function closeHistoryModal(){$('#historyModal').classList.add('hidden')}
 async function renderUsers(){
   $('#viewContent').innerHTML=pageHead('GESTÃO DE ACESSOS','Usuários','Avalie solicitações e gerencie os acessos do portal.')+
   '<div class="card section-card"><div class="section-head"><div><h3>Aguardando aprovação</h3><p>Escolha se cada conta terá acesso de Administrador, Fornecedor, Comercial ou CD.</p></div></div><div id="pendingBody" class="empty-state">Carregando...</div></div>'+
-  '<div class="card section-card users-card"><div class="section-head"><div><h3>Usuários do portal</h3><p>Altere o perfil de contas ativas. A exclusão de fornecedores mantém o histórico das entregas.</p></div></div><div id="adminUsersBody" class="empty-state">Carregando...</div></div>';
+  '<div class="card section-card users-card"><div class="section-head"><div><h3>Usuários do portal</h3><p>Altere o perfil de contas ativas. A exclusão de fornecedores mantém o histórico das entregas.</p></div></div>'+
+  '<div class="user-filters"><label class="user-search"><span class="sr-only">Pesquisar por nome, fornecedor ou perfil</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg><input id="userSearch" type="search" autocomplete="off" placeholder="Pesquisar nome, fornecedor ou perfil" value="'+esc(state.userSearch)+'"></label><label class="user-role-filter"><span>Perfil</span><select id="userRoleFilter"><option value="">Todos os perfis</option><option value="admin"'+(state.userRoleFilter==='admin'?' selected':'')+'>Administrador</option><option value="supplier"'+(state.userRoleFilter==='supplier'?' selected':'')+'>Fornecedor</option><option value="commercial"'+(state.userRoleFilter==='commercial'?' selected':'')+'>Comercial</option><option value="cd"'+(state.userRoleFilter==='cd'?' selected':'')+'>CD</option></select></label><span id="userSearchCount" class="user-search-count" aria-live="polite"></span></div>'+
+  '<div id="adminUsersBody" class="empty-state">Carregando...</div></div>';
   await Promise.all([refreshPending(),refreshAdminUsers()]);
 }
 async function refreshPending(){
@@ -447,10 +455,21 @@ async function refreshAdminUsers(){
   try{
     const rows=(await api('/api/admin/users')).users;
     state.adminUsers=rows;
-    const target=$('#adminUsersBody');if(!target)return;
-    target.className='';
-    target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item user-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name||'Sem fornecedor vinculado')+'</small></div><div class="user-actions"><span class="badge '+(u.role==='admin'?'role-admin':u.role==='commercial'?'role-commercial':u.role==='cd'?'role-cd':'role-supplier')+'">'+esc(roleNames[u.role]||u.role)+'</span><span class="badge '+(u.status==='active'?'active':'cancelled')+'">'+(u.status==='active'?'Ativo':'Pendente')+'</span>'+(u.status==='active'&&u.id!==state.user.id?'<button class="btn" type="button" data-edit-user="'+esc(u.id)+'">Alterar perfil</button>':'')+(u.role==='supplier'?'<button class="btn btn-danger" type="button" data-delete-user="'+esc(u.id)+'">Excluir</button>':'')+'</div></div>').join(''):'<div class="empty-state"><strong>Nenhum usuário cadastrado</strong></div>';
+    renderAdminUserRows();
   }catch(e){const target=$('#adminUsersBody');if(target)target.textContent=e.message;toast(e.message,true)}
+}
+const normalizeUserSearch=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
+function renderAdminUserRows(){
+  const target=$('#adminUsersBody');if(!target)return;
+  const terms=normalizeUserSearch(state.userSearch).trim().split(/\s+/).filter(Boolean);
+  const rows=state.adminUsers.filter(u=>{
+    if(state.userRoleFilter&&u.role!==state.userRoleFilter)return false;
+    const text=normalizeUserSearch([u.name,u.supplier_name,u.email,roleNames[u.role],u.role].join(' '));
+    return terms.every(term=>text.includes(term));
+  });
+  $('#userSearchCount').textContent=formatNum(rows.length)+' de '+formatNum(state.adminUsers.length)+' usuários';
+  target.className='';
+  target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item user-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name||'Sem fornecedor vinculado')+'</small></div><div class="user-actions"><span class="badge '+(u.role==='admin'?'role-admin':u.role==='commercial'?'role-commercial':u.role==='cd'?'role-cd':'role-supplier')+'">'+esc(roleNames[u.role]||u.role)+'</span><span class="badge '+(u.status==='active'?'active':'cancelled')+'">'+(u.status==='active'?'Ativo':'Pendente')+'</span>'+(u.status==='active'&&u.id!==state.user.id?'<button class="btn" type="button" data-edit-user="'+esc(u.id)+'">Alterar perfil</button>':'')+(u.role==='supplier'?'<button class="btn btn-danger" type="button" data-delete-user="'+esc(u.id)+'">Excluir</button>':'')+'</div></div>').join(''):'<div class="empty-state"><strong>'+(state.adminUsers.length?'Nenhum usuário encontrado para este filtro.':'Nenhum usuário cadastrado')+'</strong></div>';
 }
 function openUserRoleModal(id){
   const user=state.adminUsers.find(row=>String(row.id)===String(id));
@@ -622,6 +641,8 @@ document.addEventListener('click',async e=>{
   if(e.target.id==='logoutBtn'){await api('/api/logout','POST',{});state.user=null;showAuth('login')}
 });
 document.addEventListener('input',e=>{
+  if(e.target.matches('form[data-arrival-form] input[name="arrival_time"]'))updateArrivalSubmit(e.target);
+  if(e.target.id==='userSearch'){state.userSearch=e.target.value;renderAdminUserRows();return}
   if(e.target.matches('[data-combo-search]'))renderComboResults(e.target.closest('[data-supplier-combo]'),e.target.value);
   if(['scheduleStart','scheduleEnd','scheduleCapacity'].includes(e.target.id))updateDailyLimitPreview();
 });
@@ -638,6 +659,8 @@ document.addEventListener('keydown',e=>{
   }
 });
 document.addEventListener('change',e=>{
+  if(e.target.matches('form[data-arrival-form] input[name="arrival_time"]')){updateArrivalSubmit(e.target);return}
+  if(e.target.id==='userRoleFilter'){state.userRoleFilter=e.target.value;renderAdminUserRows();return}
   if(e.target.id==='arrivalDay'){state.arrivalDay=e.target.value||today();refreshArrivals();return}
   if(['delayFrom','delayTo'].includes(e.target.id)){
     state.delayFrom=$('#delayFrom').value;state.delayTo=$('#delayTo').value;
@@ -667,6 +690,10 @@ document.addEventListener('submit',async e=>{
   const form=e.target;
   if(!form.hasAttribute('data-arrival-form')&&!['bootstrapForm','registerForm','loginForm','bookingForm','supplierForm','historyForm','schedulingForm','userRoleForm'].includes(form.id))return;
   e.preventDefault();
+  if(form.hasAttribute('data-arrival-form')){
+    const input=form.querySelector('input[name="arrival_time"]');
+    if(!input?.value||!input.validity.valid){input?.reportValidity();toast('Informe o horário de chegada antes de registrar.',true);return}
+  }
   submitButton(form,true);
   const values=Object.fromEntries(new FormData(form));
   try{
@@ -747,6 +774,6 @@ document.addEventListener('submit',async e=>{
     else if(form.id==='bookingForm'&&((normalized.includes('limite de ')&&normalized.includes('veiculos'))||normalized.includes('todos os horarios')||normalized.includes('horarios desta data')))openBookingCapacityModal();
     else toast(message,true);
   }
-  finally{if(form.isConnected)submitButton(form,false)}
+  finally{if(form.isConnected){submitButton(form,false);if(form.hasAttribute('data-arrival-form'))updateArrivalSubmit(form.querySelector('input[name="arrival_time"]'))}}
 });
 (async()=>{try{state.meta=await api('/api/meta');const session=await api('/api/me');state.user=session.user;if(state.user)showApp();else if(session.pending)showRegistrationReceived('Seu cadastro está aguardando a aprovação da equipe.');else showAuth()}catch(e){$('#authContent').innerHTML='<div class="auth-inner"><h2>Não foi possível carregar o portal</h2><p class="subtext">'+esc(e.message)+'</p><button class="btn" onclick="location.reload()">Tentar novamente</button></div>'}})();
