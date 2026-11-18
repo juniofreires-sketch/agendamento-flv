@@ -181,9 +181,12 @@ export async function api(path,method='GET',body){
     const profile=await signedInProfile();
     if(!profile||profile.status!=='active'||!['admin','supplier'].includes(profile.role))throw new Error('Este perfil não pode consultar horários de agendamento.');
     const day=url.searchParams.get('day')||'';
+    const {data:blockedDay,error:blockedError}=await supabase.from('blocked_booking_days').select('day').eq('day',day).maybeSingle();
+    fail(blockedError);
+    if(blockedDay)return {slots:[],blocked:true};
     const {data,error}=await supabase.rpc('available_booking_slots',{p_day:day});
     fail(error);
-    return {slots:(data||[]).map(row=>String(row.slot).slice(0,5))};
+    return {slots:(data||[]).map(row=>String(row.slot).slice(0,5)),blocked:false};
   }
   if(p==='/api/bookings'&&method==='GET'){
     const profile=await signedInProfile();
@@ -270,6 +273,17 @@ export async function api(path,method='GET',body){
     const {data,error:readError}=await supabase.from('scheduling_settings').select('start_time,end_time,interval_minutes,vehicles_per_slot,daily_vehicle_limit').eq('id',1).single();
     fail(readError);
     return {scheduling:{...data,start_time:String(data.start_time).slice(0,5),end_time:String(data.end_time).slice(0,5)}};
+  }
+  if(p==='/api/admin/blocked-days'){
+    const profile=await signedInProfile();
+    if(!profile||profile.role!=='admin')throw new Error('Apenas administradores podem configurar dias bloqueados.');
+    if(method==='POST'){
+      const {error}=await supabase.rpc('admin_set_booking_day_block',{p_day:body?.day,p_blocked:body?.blocked});
+      fail(error);
+    }
+    const {data,error}=await supabase.from('blocked_booking_days').select('day').order('day');
+    fail(error);
+    return {days:(data||[]).map(row=>row.day)};
   }
   const updateRole=/^\/api\/admin\/users\/([a-f0-9-]+)\/role$/.exec(p);
   if(updateRole&&method==='POST'){

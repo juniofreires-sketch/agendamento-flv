@@ -86,6 +86,12 @@ db.exec(`CREATE TABLE IF NOT EXISTS scheduling_settings (
 );
 INSERT OR IGNORE INTO scheduling_settings(id,start_time,end_time,interval_minutes,vehicles_per_slot,daily_vehicle_limit)
 VALUES ('global','05:00','09:00',30,9,81);`);
+db.exec(`CREATE TABLE IF NOT EXISTS blocked_booking_days (
+  day TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);`);
+const blockedBookingDay = day => Boolean(db.prepare('SELECT 1 FROM blocked_booking_days WHERE day=?').get(day));
+const listBlockedBookingDays = () => db.prepare('SELECT day FROM blocked_booking_days ORDER BY day').all().map(row=>row.day);
 const vehicleTypes = ['3/4','BITREM','CARRETA 24','CARRETA 26','CARRETA 28','CARRETA 30','FIORINO','TOCO','TRUCK','VUC'];
 const cargoTypes = ['Batida / Paletizada','Carga batida','Paletizada','Pallet sobreposto'];
 const getSchedulingSettings = () => db.prepare("SELECT start_time,end_time,interval_minutes,vehicles_per_slot,daily_vehicle_limit FROM scheduling_settings WHERE id='global'").get();
@@ -121,7 +127,7 @@ const isSunday = day => new Date(day + 'T00:00:00Z').getUTCDay() === 0;
 const allowedSlots = day => {
   const settings = getSchedulingSettings();
   const now = nowParts();
-  if (!isValidDay(day) || isSunday(day) || day <= now.day) return [];
+  if (!isValidDay(day) || isSunday(day) || day <= now.day || blockedBookingDay(day)) return [];
   return slotsFor(settings).filter(slot => day > now.day || slot >= now.time);
 };
 const availableSlotsFor = day => {
@@ -217,7 +223,8 @@ const server = http.createServer(async (req,res) => {
       if(!['admin','supplier'].includes(user.role))return fail(res,403,'Este perfil não pode consultar horários de agendamento.');
       const day=url.searchParams.get('day')||'';
       if(!isValidDay(day)||isSunday(day)||day<=nowParts().day)return fail(res,400,'Escolha uma data disponível a partir de amanhã. Domingos não recebem agendamentos.');
-      return json(res,200,{slots:availableSlotsFor(day)});
+      if(blockedBookingDay(day))return json(res,200,{slots:[],blocked:true});
+      return json(res,200,{slots:availableSlotsFor(day),blocked:false});
     }
     if (req.method === 'POST' && p === '/api/bootstrap') {
       if (db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='admin'").get().n) return fail(res,403,'Administrador já configurado.');
@@ -263,6 +270,7 @@ const server = http.createServer(async (req,res) => {
       const supplierId = user.role === 'admin' ? Number(b.supplier_id) : user.supplier_id;
       if (!db.prepare('SELECT id FROM suppliers WHERE id=?').get(supplierId)) return fail(res,400,'Selecione um fornecedor válido.');
       if (!isValidDay(day) || isSunday(day) || day <= nowParts().day) return fail(res,400,'Os agendamentos estão disponíveis de segunda a sábado, somente a partir do dia seguinte. Para entregas fora da janela, entre em contato com o setor comercial.');
+      if (blockedBookingDay(day)) return fail(res,409,'Os agendamentos para '+day.split('-').reverse().join('/')+' estão bloqueados. Escolha outra data.');
       if (!Number.isFinite(weight) || weight <= 0 || !Number.isInteger(items) || items < 0 || !Number.isInteger(boxes) || boxes < 0) return fail(res,400,'Informe peso positivo e quantidades inteiras maiores ou iguais a zero.');
       if (!vehicleTypes.includes(b.vehicle_type) || !cargoTypes.includes(b.cargo_type)) return fail(res,400,'Selecione o tipo de veículo e o tipo de carga.');
       const requestedSlot=String(b.slot||'').slice(0,5);
@@ -270,6 +278,7 @@ const server = http.createServer(async (req,res) => {
       const order = String(b.order_number||'').trim().slice(0,80), invoice = String(b.invoice_number||'').trim().slice(0,80);
       db.exec('BEGIN IMMEDIATE');
       try {
+        if(blockedBookingDay(day)){db.exec('ROLLBACK');return fail(res,409,'Os agendamentos para '+day.split('-').reverse().join('/')+' estão bloqueados. Escolha outra data.');}
         const dailyCount = db.prepare("SELECT COUNT(*) AS n FROM bookings WHERE day=? AND status='active'").get(day).n;
         if (dailyCount >= settings.daily_vehicle_limit) { db.exec('ROLLBACK'); return fail(res,409,`O limite de ${settings.daily_vehicle_limit} veículos para esta data foi atingido. Escolha outro dia ou entre em contato com o setor comercial.`); }
         const occupied = db.prepare("SELECT slot,COUNT(*) AS n FROM bookings WHERE day=? AND status='active' GROUP BY slot").all(day);
@@ -453,6 +462,18 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'GET' && p === '/api/admin/users') {
       if (!requireUser(req,res,true)) return;
       return json(res,200,{users:db.prepare("SELECT u.id,u.name,u.email,u.role,u.status,u.created_at,u.requested_supplier_name,coalesce(s.name,u.requested_supplier_name) AS supplier_name FROM users u LEFT JOIN suppliers s ON s.id=u.supplier_id ORDER BY u.created_at DESC").all()});
+    }
+    if (p === '/api/admin/blocked-days') {
+      if (!requireUser(req,res,true)) return;
+      if (req.method === 'GET') return json(res,200,{days:listBlockedBookingDays()});
+      if (req.method === 'POST') {
+        const {day,blocked}=await readBody(req);
+        if(!isValidDay(day)||typeof blocked!=='boolean')return fail(res,400,'Informe uma data válida.');
+        if(blocked&&(day<=nowParts().day||isSunday(day)))return fail(res,400,'Escolha uma data futura de segunda a sábado.');
+        if(blocked)db.prepare('INSERT OR IGNORE INTO blocked_booking_days(day) VALUES (?)').run(day);
+        else db.prepare('DELETE FROM blocked_booking_days WHERE day=?').run(day);
+        return json(res,200,{days:listBlockedBookingDays()});
+      }
     }
     if (req.method === 'POST' && p === '/api/admin/settings') {
       if (!requireUser(req,res,true)) return;

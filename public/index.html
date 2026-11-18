@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1f40">
   <title>Portal FLV · Agendamento de entregas</title>
-  <link rel="stylesheet" href="/styles.css?v=19">
+  <link rel="stylesheet" href="/styles.css?v=20">
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -98,7 +98,22 @@
       <div class="capacity-footer"><button type="button" class="btn btn-primary capacity-button" data-capacity-close>Entendi <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 10 4 4 8-8"/></svg></button></div>
     </section>
   </div>
+  <div id="bookingNoticeModal" class="modal-backdrop booking-notice-backdrop hidden" role="presentation">
+    <section class="booking-notice-dialog" role="dialog" aria-modal="true" aria-labelledby="bookingNoticeTitle" aria-describedby="bookingNoticeMessage">
+      <div class="booking-notice-accent"></div>
+      <button type="button" class="booking-notice-close" data-booking-notice-close aria-label="Fechar aviso">&times;</button>
+      <div class="booking-notice-content">
+        <div class="booking-notice-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.4 2.7 17a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 3.4a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 4h.01"/></svg></div>
+        <span class="booking-notice-eyebrow">COMUNICADO IMPORTANTE</span>
+        <h2 id="bookingNoticeTitle">Atenção, fornecedores!</h2>
+        <p id="bookingNoticeMessage">Os agendamentos devem ser realizados <strong>por veículo</strong>, sendo necessário efetuar um agendamento individual para cada veículo que realizará uma entrega.</p>
+        <div class="booking-notice-rule"><svg viewBox="0 0 44 36" fill="none" aria-hidden="true"><rect x="3" y="8" width="26" height="20" rx="3" fill="#ffe1a3" stroke="#b37924" stroke-width="1.5"/><path d="M29 15h6l6 7v6H29" stroke="#b37924" stroke-width="1.5" fill="#fff2d5"/><circle cx="12" cy="29" r="3" fill="#986921"/><circle cx="34" cy="29" r="3" fill="#986921"/></svg><div><strong>1 veículo = 1 agendamento</strong><small>Uma solicitação individual por veículo</small></div></div>
+        <p class="booking-notice-thanks">Agradecemos pela compreensão e colaboração!</p>
+      </div>
+      <div class="booking-notice-footer"><span>AVISO AOS FORNECEDORES</span><button type="button" id="confirmBookingNotice" class="booking-notice-confirm" data-booking-notice-close>Entendi <span aria-hidden="true">✓</span></button></div>
+    </section>
+  </div>
   <section id="agendaPrint" class="agenda-print" aria-hidden="true"></section>
-  <script type="module" src="/app.js?v=23"></script>
+  <script type="module" src="/app.js?v=24"></script>
 </body>
 </html>

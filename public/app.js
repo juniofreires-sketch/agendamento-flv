@@ -8,8 +8,9 @@ const api = async (url, method='GET', body) => {
   if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a operação.');
   return data;
 };
-const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardTab:'general',dashboardSupplierRows:[],dashboardDay:'',dashboardDayPage:0,arrivalDay:'',arrivalTab:'pending',arrivals:[],arrivalRequest:0,delayFrom:'',delayTo:'',delaySuppliers:[],delayRequest:0,delayDetailRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],availabilityRequest:0,bookings:[],pending:[],adminUsers:[],userSearch:'',userRoleFilter:'',editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
+const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardTab:'general',dashboardSupplierRows:[],dashboardDay:'',dashboardDayPage:0,arrivalDay:'',arrivalTab:'pending',arrivals:[],arrivalRequest:0,delayFrom:'',delayTo:'',delaySuppliers:[],delayRequest:0,delayDetailRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],slotBlocked:false,availabilityRequest:0,bookingNoticeAcknowledged:false,bookings:[],pending:[],adminUsers:[],userSearch:'',userRoleFilter:'',blockedDays:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
 let notificationTimer;
+let bookingNoticeReturnFocus=null;
 const notificationStorageKey = id => 'flv-notifications-seen:'+id;
 function renderNotifications(){
   const unread=state.pendingNotifications.filter(u=>!state.notificationSeen.includes(String(u.id)));
@@ -141,6 +142,7 @@ function navigate(view){
   closeNotifications();
   if(!allowedViews(state.user.role).includes(view))view=defaultView(state.user.role);
   state.view=view;
+  if(view==='schedule'&&state.user.role==='supplier')state.bookingNoticeAcknowledged=false;
   const titles={dashboard:'Dashboard',schedule:'Novo agendamento',bookings:'Agendamentos',arrivals:'Chegada CD',users:'Usuários',admin:'Administração'};
   $('#pageTitle').textContent=titles[view];$('#crumb').textContent=titles[view].toUpperCase();
   document.querySelectorAll('.nav-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
@@ -365,9 +367,25 @@ function renderSchedule(){
   '';
   refreshAvailableSlots(state.slotDay);
 }
+function openBookingNotice(target){
+  if(state.bookingNoticeAcknowledged||state.user?.role!=='supplier')return;
+  bookingNoticeReturnFocus=target||null;
+  $('#appShell').inert=true;
+  $('#bookingNoticeModal').classList.remove('hidden');
+  $('#confirmBookingNotice').focus();
+}
+function closeBookingNotice(){
+  if($('#bookingNoticeModal').classList.contains('hidden'))return;
+  state.bookingNoticeAcknowledged=true;
+  $('#bookingNoticeModal').classList.add('hidden');
+  $('#appShell').inert=false;
+  if(bookingNoticeReturnFocus?.isConnected&&state.view==='schedule')bookingNoticeReturnFocus.focus();
+  bookingNoticeReturnFocus=null;
+}
 function renderAvailableSlots(){
   const target=$('#bookingSlots');if(!target)return;
-  if(!state.availableSlots.length){target.innerHTML='<div class="slot-message">Não há horários disponíveis para esta data. Escolha outra data para continuar.</div>';state.selectedSlot=''}
+  if(state.slotBlocked){target.innerHTML='<div class="slot-message blocked">Agendamentos bloqueados para '+dateBR(state.slotDay)+'. Escolha outra data.</div>';state.selectedSlot=''}
+  else if(!state.availableSlots.length){target.innerHTML='<div class="slot-message">Não há horários disponíveis para esta data. Escolha outra data para continuar.</div>';state.selectedSlot=''}
   else target.innerHTML=state.availableSlots.map(slot=>'<button type="button" class="booking-slot'+(state.selectedSlot===slot?' selected':'')+'" aria-pressed="'+(state.selectedSlot===slot)+'" data-booking-slot="'+esc(slot)+'">'+esc(slot)+'</button>').join('');
   const input=$('#bookingSlot');if(input)input.value=state.selectedSlot;
 }
@@ -375,13 +393,15 @@ async function refreshAvailableSlots(day){
   const requestId=++state.availabilityRequest;
   const target=$('#bookingSlots');if(!target)return;
   state.availableSlots=[];
+  state.slotBlocked=false;
   target.innerHTML='<div class="slot-message">Carregando horários disponíveis...</div>';
   try{
     const result=await api('/api/availability?day='+encodeURIComponent(day));
     if(requestId!==state.availabilityRequest||state.view!=='schedule'||state.slotDay!==day)return;
     state.availableSlots=result.slots||[];
+    state.slotBlocked=Boolean(result.blocked);
     if(!state.availableSlots.includes(state.selectedSlot))state.selectedSlot='';
-    if(!state.availableSlots.length)openBookingCapacityModal();
+    if(!state.availableSlots.length&&!state.slotBlocked)openBookingCapacityModal();
     renderAvailableSlots();
   }catch(error){
     if(requestId!==state.availabilityRequest||state.view!=='schedule'||state.slotDay!==day)return;
@@ -500,9 +520,20 @@ function renderAdmin(){
   const rules=state.meta.scheduling;
   $('#viewContent').innerHTML=pageHead('ADMINISTRAÇÃO','Configurações','Cadastre fornecedores e configure as regras que valem para todos os agendamentos.')+
   '<div class="card section-card"><div class="section-head"><div><h3>Sistemática global de agendamento</h3><p>As regras salvas serão aplicadas a todos os fornecedores.</p></div></div><form id="schedulingForm" class="settings-form"><div class="field-row"><div class="field"><label for="scheduleStart">Início da janela</label><input id="scheduleStart" name="start_time" type="time" step="1800" value="'+esc(rules.start_time)+'" required></div><div class="field"><label for="scheduleEnd">Final da janela</label><input id="scheduleEnd" name="end_time" type="time" step="1800" value="'+esc(rules.end_time)+'" required><small>O horário final é o início da última faixa disponível.</small></div></div><div class="field-row"><div class="field"><label for="scheduleInterval">Intervalo entre faixas</label><select id="scheduleInterval" name="interval_minutes"><option value="30"'+(Number(rules.interval_minutes)===30?' selected':'')+'>A cada meia hora</option><option value="60"'+(Number(rules.interval_minutes)===60?' selected':'')+'>A cada hora</option></select></div><div class="field"><label for="scheduleCapacity">Carros por faixa</label><input id="scheduleCapacity" name="vehicles_per_slot" type="number" min="1" max="10000" step="1" value="'+esc(rules.vehicles_per_slot)+'" required></div></div><div class="field"><label for="scheduleDailyLimit">Limite de veículos por dia</label><input id="scheduleDailyLimit" name="daily_vehicle_limit" type="number" min="1" max="1000000" step="1" value="'+esc(rules.daily_vehicle_limit)+'" readonly required><small>Calculado automaticamente: faixas disponíveis × carros por faixa.</small></div><button type="submit" class="btn btn-primary">Salvar sistemática</button></form></div>'+
+  '<div class="card section-card blocked-days-card"><div class="section-head"><div><h3>Dias sem agendamento</h3><p>Bloqueie datas de feriado, manutenção ou parada da operação. Domingos já são bloqueados automaticamente.</p></div></div><form id="blockedDayForm" class="blocked-day-form"><div class="field"><label for="blockedDay">Data a bloquear</label><input id="blockedDay" name="day" type="date" min="'+dateOffset(today(),1)+'" required></div><button type="submit" class="btn btn-primary">Bloquear dia</button></form><div id="blockedDaysList" class="blocked-days-list" aria-live="polite">Carregando datas...</div><small class="blocked-days-note">O bloqueio impede novos agendamentos. Agendamentos já confirmados para a data continuam registrados.</small></div>'+
   '<div class="card supplier-card admin-supplier-card"><div class="section-head"><div><h3>Novo fornecedor</h3><p>Somente administradores podem cadastrar empresas diretamente.</p></div></div><form id="supplierForm"><div class="field"><label for="newSupplier">Razão social</label><input id="newSupplier" name="name" minlength="3" maxlength="160" required placeholder="Nome completo do fornecedor"></div><button type="submit" class="btn btn-primary">Cadastrar fornecedor</button></form><div class="info-panel" style="margin-top:22px"><h3>Base cadastrada</h3><p><strong>'+state.meta.suppliers.length+' fornecedores</strong> disponíveis para seleção.</p></div></div>';
   updateDailyLimitPreview();
-}function openTicket(b){
+  refreshBlockedDays();
+}
+function renderBlockedDays(){
+  const target=$('#blockedDaysList');if(!target)return;
+  target.innerHTML=state.blockedDays.length?state.blockedDays.map(day=>'<div class="blocked-day-item"><strong>'+dateBR(day)+'</strong><button type="button" class="btn" data-unblock-day="'+esc(day)+'" aria-label="Desbloquear '+dateBR(day)+'">Desbloquear</button></div>').join(''):'<span>Nenhuma data adicional bloqueada.</span>';
+}
+async function refreshBlockedDays(){
+  try{state.blockedDays=(await api('/api/admin/blocked-days')).days||[];renderBlockedDays()}
+  catch(error){const target=$('#blockedDaysList');if(target)target.textContent=error.message;toast(error.message,true)}
+}
+function openTicket(b){
   $('#ticketContent').innerHTML='<div class="ticket"><div class="ticket-header"><small>SENHA PARA ENTREGA DE MERCADORIA</small><div class="ticket-number">'+String(b.id).padStart(3,'0')+'</div></div><p class="ticket-protocol">Apresente esta senha no check-in · Protocolo AGE-'+b.id+'</p>'+
   [['Data da entrega',dateBR(b.day)],['Horário agendado',b.slot],['Filial','ATACADAO DIA A DIA S.A. · 17.457.404/0009-69'],['Endereço','ST POLO DE DESENVOLVIMENTO JK TRECHO 2/3, S/N - SANTA MARIA - BRASILIA/DF - CEP 72549-575'],['Doca','FLV'],['Fornecedor',b.supplier_name],['Número do pedido',b.order_number||'—'],['Nota fiscal',b.invoice_number||'—'],['Peso da carga',formatWeight(b.weight_kg)+' kg'],['Quantidade de itens',formatNum(b.item_count)],['Quantidade de caixas',formatNum(b.box_count)],['Tipo de veículo',b.vehicle_type],['Tipo de carga',b.cargo_type],['Situação',b.status==='active'?'Confirmado':b.status==='no_show'?'No show':'Cancelado']].map(x=>'<div class="ticket-row"><span>'+esc(x[0])+'</span><strong>'+esc(x[1])+'</strong></div>').join('')+'<p class="ticket-footer">Apresente esta senha à portaria no dia da entrega.</p></div>';
   $('#printTicket').disabled=b.status!=='active';
@@ -514,7 +545,21 @@ function openBookingCapacityModal(){
   $('#closeBookingCapacity').focus();
 }
 function closeBookingCapacityModal(){$('#bookingCapacityModal').classList.add('hidden')}
+document.addEventListener('click',e=>{
+  if(state.view!=='schedule'||state.user?.role!=='supplier'||state.bookingNoticeAcknowledged||!e.target.closest('#bookingForm'))return;
+  e.preventDefault();e.stopImmediatePropagation();openBookingNotice(e.target);
+},true);
+document.addEventListener('focusin',e=>{
+  if(state.view==='schedule'&&state.user?.role==='supplier'&&!state.bookingNoticeAcknowledged&&e.target.closest('#bookingForm'))openBookingNotice(e.target);
+});
 document.addEventListener('click',async e=>{
+  if(e.target.closest('[data-booking-notice-close]')){closeBookingNotice();return}
+  const unblockDay=e.target.closest('[data-unblock-day]');
+  if(unblockDay){
+    try{state.blockedDays=(await api('/api/admin/blocked-days','POST',{day:unblockDay.dataset.unblockDay,blocked:false})).days;renderBlockedDays();toast('Data liberada para novos agendamentos.')}
+    catch(error){toast(error.message,true)}
+    return;
+  }
   if(e.target.closest('#notificationBell')){
     if(!$('#notificationPanel').classList.contains('hidden')){closeNotifications();return}
     await refreshNotifications();
@@ -648,7 +693,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshNotifications()});
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){closeNotifications();closeSupplierCombos();closeHistoryModal();closeUserRoleModal();closeBookingCapacityModal();closeDashboardDayModal();closeDelayModal();return}
+  if(e.key==='Escape'){closeNotifications();closeSupplierCombos();closeHistoryModal();closeUserRoleModal();closeBookingCapacityModal();closeBookingNotice();closeDashboardDayModal();closeDelayModal();return}
   if(e.key==='Enter'&&e.target.matches('[data-combo-search]')){
     const first=e.target.closest('[data-supplier-combo]').querySelector('[data-combo-option]');
     if(first){e.preventDefault();first.click()}
@@ -688,8 +733,9 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('submit',async e=>{
   const form=e.target;
-  if(!form.hasAttribute('data-arrival-form')&&!['bootstrapForm','registerForm','loginForm','bookingForm','supplierForm','historyForm','schedulingForm','userRoleForm'].includes(form.id))return;
+  if(!form.hasAttribute('data-arrival-form')&&!['bootstrapForm','registerForm','loginForm','bookingForm','blockedDayForm','supplierForm','historyForm','schedulingForm','userRoleForm'].includes(form.id))return;
   e.preventDefault();
+  if(form.id==='bookingForm'&&state.user?.role==='supplier'&&!state.bookingNoticeAcknowledged){openBookingNotice(form.querySelector('button[type="submit"]'));return}
   if(form.hasAttribute('data-arrival-form')){
     const input=form.querySelector('input[name="arrival_time"]');
     if(!input?.value||!input.validity.valid){input?.reportValidity();toast('Informe o horário de chegada antes de registrar.',true);return}
@@ -727,7 +773,13 @@ document.addEventListener('submit',async e=>{
       toast('Agendamento confirmado para '+r.booking.slot+'.');
       openTicket(r.booking);
       state.selectedSlot='';
+      state.bookingNoticeAcknowledged=false;
       renderSchedule();
+    }
+    if(form.id==='blockedDayForm'){
+      if(!values.day||values.day<=today()||isSunday(values.day))throw new Error('Escolha uma data futura de segunda a sábado.');
+      state.blockedDays=(await api('/api/admin/blocked-days','POST',{day:values.day,blocked:true})).days;
+      renderBlockedDays();form.reset();toast('Data bloqueada para novos agendamentos.');
     }
     if(form.id==='supplierForm'){
       const r=await api('/api/admin/suppliers','POST',values);
@@ -770,7 +822,8 @@ document.addEventListener('submit',async e=>{
   }catch(err){
     const message=String(err.message||'');
     const normalized=message.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-    if(form.id==='bookingForm'&&normalized.includes('horario selecionado')){state.selectedSlot='';refreshAvailableSlots(state.slotDay);toast('Esse horário acabou de ser preenchido. Selecione outro horário disponível.',true)}
+    if(form.id==='bookingForm'&&normalized.includes('bloquead')){state.selectedSlot='';refreshAvailableSlots(state.slotDay);toast(message,true)}
+    else if(form.id==='bookingForm'&&normalized.includes('horario selecionado')){state.selectedSlot='';refreshAvailableSlots(state.slotDay);toast('Esse horário acabou de ser preenchido. Selecione outro horário disponível.',true)}
     else if(form.id==='bookingForm'&&((normalized.includes('limite de ')&&normalized.includes('veiculos'))||normalized.includes('todos os horarios')||normalized.includes('horarios desta data')))openBookingCapacityModal();
     else toast(message,true);
   }
