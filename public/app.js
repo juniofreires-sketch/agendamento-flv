@@ -8,7 +8,7 @@ const api = async (url, method='GET', body) => {
   if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a operação.');
   return data;
 };
-const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardTab:'general',dashboardSupplierRows:[],dashboardDay:'',dashboardDayPage:0,arrivalDay:'',arrivalTab:'pending',arrivals:[],unscheduledArrivals:[],arrivalRequest:0,delayFrom:'',delayTo:'',delaySuppliers:[],delayRequest:0,delayDetailRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],slotBlocked:false,availabilityRequest:0,bookingNoticeAcknowledged:false,bookings:[],pending:[],adminUsers:[],manualSuppliers:[],userSearch:'',userRoleFilter:'',blockedDays:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
+const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardTab:'general',dashboardSupplierRows:[],dashboardDay:'',dashboardDayPage:0,arrivalDay:'',arrivalTab:'pending',arrivals:[],unscheduledArrivals:[],unscheduledArrivalsError:null,arrivalRequest:0,delayFrom:'',delayTo:'',delaySuppliers:[],delayRequest:0,delayDetailRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],slotBlocked:false,availabilityRequest:0,bookingNoticeAcknowledged:false,bookings:[],pending:[],adminUsers:[],manualSuppliers:[],userSearch:'',userRoleFilter:'',blockedDays:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
 let notificationTimer;
 let bookingNoticeReturnFocus=null;
 const notificationStorageKey = id => 'flv-notifications-seen:'+id;
@@ -326,13 +326,15 @@ async function refreshArrivals(){
   const request=++state.arrivalRequest,day=state.arrivalDay;
   const target=$('#arrivalBody');if(target)target.innerHTML='<div class="empty-state">Carregando agendamentos...</div>';
   try{
-    const [result,unscheduled]=await Promise.all([
+    const [result,unscheduled]=await Promise.allSettled([
       api('/api/arrivals?'+new URLSearchParams({day})),
       api('/api/arrivals/unscheduled?'+new URLSearchParams({day}))
     ]);
     if(request!==state.arrivalRequest||state.view!=='arrivals')return;
-    state.arrivals=result.bookings;
-    state.unscheduledArrivals=unscheduled.arrivals;
+    if(result.status==='rejected')throw result.reason;
+    state.arrivals=result.value.bookings;
+    state.unscheduledArrivals=unscheduled.status==='fulfilled'?unscheduled.value.arrivals:[];
+    state.unscheduledArrivalsError=unscheduled.status==='rejected'?unscheduled.reason.message:null;
     renderArrivalTab();
   }catch(error){if(request!==state.arrivalRequest)return;$('#arrivalBody').innerHTML='<div class="empty-state">'+esc(error.message)+'</div>'}
 }
@@ -346,6 +348,7 @@ function renderArrivalTab(){
   $('#arrivalUnscheduledCount').textContent='('+formatNum(state.unscheduledArrivals.length)+')';
   document.querySelectorAll('[data-arrival-tab]').forEach(button=>button.classList.toggle('active',button.dataset.arrivalTab===state.arrivalTab));
   if(state.arrivalTab==='unscheduled'){
+    if(state.unscheduledArrivalsError){$('#arrivalBody').innerHTML='<div class="empty-state">'+esc(state.unscheduledArrivalsError)+'</div>';return}
     const rows=state.unscheduledArrivals;
     $('#arrivalBody').innerHTML=rows.length?'<div class="table-wrap"><table class="data-table unscheduled-list-table"><thead><tr><th>Fornecedor</th><th>Data da chegada</th><th>Horário de chegada</th><th>Situação</th></tr></thead><tbody>'+rows.map(row=>'<tr><td><strong>'+esc(row.supplier_name)+'</strong></td><td>'+dateBR(row.day)+'</td><td>'+esc(String(row.arrival_time).slice(0,5))+'</td><td><span class="badge no_show">Fora da agenda</span></td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state"><strong>Nenhum veículo fora da agenda nesta data.</strong></div>';
     return;
