@@ -1,12 +1,21 @@
 const $ = s => document.querySelector(s);
 const esc = x => String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const normalizeSupplierNames = (value, supplierRecord=false) => {
+  if(Array.isArray(value)){value.forEach(item=>normalizeSupplierNames(item,supplierRecord));return value}
+  if(!value||typeof value!=='object')return value;
+  for(const [key,item] of Object.entries(value)){
+    if(typeof item==='string'&&(key==='supplier_name'||key==='requested_supplier_name'||supplierRecord&&key==='name'))value[key]=item.toLocaleUpperCase('pt-BR');
+    else if(item&&typeof item==='object')normalizeSupplierNames(item,key==='suppliers'||key==='supplier');
+  }
+  return value;
+};
 const api = async (url, method='GET', body) => {
   const options = {method, credentials:'same-origin', headers:{}};
   if (body !== undefined) { options.headers['content-type']='application/json'; options.body=JSON.stringify(body); }
   const response = await fetch(url,options);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a operação.');
-  return data;
+  return normalizeSupplierNames(data);
 };
 const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardTab:'general',dashboardSupplierRows:[],dashboardDay:'',dashboardDayPage:0,arrivalDay:'',arrivalTab:'pending',arrivals:[],unscheduledArrivals:[],unscheduledArrivalsError:null,arrivalRequest:0,delayFrom:'',delayTo:'',delaySuppliers:[],delayRequest:0,delayDetailRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],slotBlocked:false,availabilityRequest:0,bookingNoticeAcknowledged:false,bookings:[],pending:[],adminUsers:[],manualSuppliers:[],userSearch:'',userRoleFilter:'',blockedDays:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
 let notificationTimer;
@@ -278,7 +287,7 @@ async function renderArrivalPerformance(requestId){
     const scheduledCars=Number(unscheduledSummary.scheduled||0),walkinCars=Number(unscheduledSummary.unscheduled||0),totalCars=scheduledCars+walkinCars;
     const scheduledPercent=totalCars?Math.round(scheduledCars/totalCars*1000)/10:0;
     const walkinPercent=totalCars?Math.round(walkinCars/totalCars*1000)/10:0;
-    const walkinPanel='<div class="card section-card cd-unscheduled-panel"><div class="section-head"><div><h3>Veículos fora da agenda</h3><p>Comparativo e fornecedores com mais chegadas sem agendamento, considerando datas até hoje.</p></div></div><div class="cd-unscheduled-metrics"><div><span>Total de veículos</span><strong>'+formatNum(totalCars)+'</strong></div><div><span>Carros agendados</span><strong>'+formatNum(scheduledCars)+'</strong></div><div><span>Carros fora da agenda</span><strong>'+formatNum(walkinCars)+'</strong></div></div><div class="cd-unscheduled-metrics cd-unscheduled-percentages"><div><span>Percentual de carros agendados</span><strong>'+formatWeight(scheduledPercent)+'%</strong></div><div><span>Percentual de carros fora da agenda</span><strong>'+formatWeight(walkinPercent)+'%</strong></div></div><h4>Fornecedores com mais veículos fora da agenda</h4>'+walkinTable+'<small>Os veículos sem agendamento não entram na medição de atrasos.</small></div>';
+    const walkinPanel='<div class="card section-card cd-unscheduled-panel"><div class="section-head"><div><h3>Veículos fora da agenda</h3><p>Comparativo e fornecedores com mais chegadas sem agendamento, considerando datas até hoje.</p></div></div><div class="cd-unscheduled-metrics"><div><span>Total de veículos</span><strong>'+formatNum(totalCars)+'</strong></div><div><span>Carros agendados</span><strong>'+formatNum(scheduledCars)+'</strong></div><div><span>Carros fora da agenda</span><strong>'+formatNum(walkinCars)+'</strong></div><div><span>Percentual de carros agendados</span><strong>'+formatWeight(scheduledPercent)+'%</strong></div><div><span>Percentual de carros fora da agenda</span><strong>'+formatWeight(walkinPercent)+'%</strong></div></div><h4>Fornecedores com mais veículos fora da agenda</h4>'+walkinTable+'<small>Os veículos sem agendamento não entram na medição de atrasos.</small></div>';
     $('#dashBody').innerHTML='<div class="cd-metrics">'+cards+'</div>'+
       '<div class="cd-status-strip card"><div><strong>'+punctuality+'</strong><span>Pontualidade: '+formatNum(onTime)+' no horário · '+formatNum(early)+' adiantadas</span></div><div><strong class="no-show-value">'+noShowPercent+'</strong><span>No show entre agendamentos até hoje</span></div><div><strong>'+formatNum(pending)+'</strong><span>Aguardando registro até hoje</span></div><div><strong>'+formatNum(upcoming)+'</strong><span>Agendamentos futuros</span></div><div><strong class="negative-time">'+(late?negativeDelay(totals.average_late_minutes):'—')+'</strong><span>Atraso médio por chegada atrasada</span></div></div>'+
       '<div class="cd-analytics-grid"><div class="card section-card cd-section"><div class="section-head"><div><h3>Fornecedores com mais atrasos</h3><p>Clique no nome para ver cada data.</p></div></div>'+topTable+'</div><div class="card section-card cd-section"><div class="section-head"><div><h3>Fornecedores com mais No show</h3><p>Ausências registradas e percentual sobre agendamentos até hoje.</p></div></div>'+noShowTable+'</div></div>'+
