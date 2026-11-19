@@ -17,7 +17,7 @@ const source=await fs.readFile(path.join(root,'public','app.js'),'utf8');
 const start=source.indexOf('const api = async');
 const end=source.indexOf('const state =',start);
 if(start<0||end<0) throw new Error('Não foi possível localizar o adaptador de API local.');
-const production=source.slice(0,start)+"import { api } from './production-api.js';\n"+source.slice(end);
+const production=source.slice(0,start)+"import { api as productionApi } from './production-api.js';\nconst api = async (...args) => normalizeSupplierNames(await productionApi(...args));\n"+source.slice(end);
 await build({
   stdin:{contents:production,resolveDir:root,sourcefile:'portal-production.js',loader:'js'},
   bundle:true,format:'esm',platform:'browser',target:'es2020',minify:true,
