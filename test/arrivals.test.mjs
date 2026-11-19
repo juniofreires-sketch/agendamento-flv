@@ -101,6 +101,14 @@ try{
   assert.equal(withNoShow.top_no_show[0].no_show_percent,25);
   assert.equal(withNoShow.days[1].no_show,1);
   assert.equal(withNoShow.slots.find(row=>row.slot==='08:00').no_show,1);
+  const lateSupplier=(await call('POST','/api/admin/suppliers',{name:'Fornecedor com maior tempo de atraso'},adminCookie)).data.supplier;
+  const lateBooking=await call('POST','/api/bookings',{supplier_id:lateSupplier.id,day:day3,slot:'05:00',weight_kg:100,item_count:1,box_count:0,vehicle_type:'VUC',cargo_type:'Paletizada'},adminCookie);
+  assert.equal(lateBooking.status,200);
+  process.env.FLV_TEST_NOW=day3+'T18:00:00Z';
+  assert.equal((await call('POST','/api/arrivals/'+lateBooking.data.booking.id,{arrival_time:'08:00'},cdCookie)).status,200);
+  const ranked=(await call('GET','/api/dashboard/arrival-performance?from='+day1+'&to='+day3,undefined,adminCookie)).data.top_suppliers;
+  assert.deepEqual(ranked.map(row=>row.supplier_id),[lateSupplier.id,supplier.id]);
+  assert.deepEqual(ranked.map(row=>row.late_minutes),[180,60]);
   console.log('PASS: CD registra chegadas, perfis isolados e atrasos consolidados por data');
 }finally{
   delete process.env.FLV_TEST_NOW;

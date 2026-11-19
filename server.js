@@ -372,7 +372,7 @@ const server = http.createServer(async (req,res) => {
       totals.average_late_minutes=totals.late?Math.round(totals.late_minutes/totals.late*10)/10:0;
       const top_suppliers=Array.from(suppliers.values()).filter(item=>item.late).map(item=>({
         ...item,late_days:item.late_days.size,average_late_minutes:Math.round(item.late_minutes/item.late*10)/10
-      })).sort((a,b)=>b.late-a.late||b.late_minutes-a.late_minutes||a.supplier_name.localeCompare(b.supplier_name,'pt-BR')).slice(0,10);
+      })).sort((a,b)=>b.late_minutes-a.late_minutes||b.late-a.late||a.supplier_name.localeCompare(b.supplier_name,'pt-BR')).slice(0,10);
       const top_no_show=Array.from(suppliers.values()).filter(item=>item.no_show).map(item=>({
         supplier_id:item.supplier_id,supplier_name:item.supplier_name,no_show:item.no_show,
         scheduled_to_date:item.scheduled_to_date,
