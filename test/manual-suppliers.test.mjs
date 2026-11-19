@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import { Readable } from 'node:stream';
+process.env.FLV_TEST_MODE='1';
+const {server}=await import('../server.js');
+async function call(method,url,body,cookie=''){
+  return new Promise((resolve,reject)=>{
+    const req=Readable.from(body===undefined?[]:[JSON.stringify(body)]);
+    req.method=method;req.url=url;req.headers={host:'localhost:3100',cookie,origin:'http://localhost:3100'};
+    const res={status:200,headers:{},writeHead(status,headers){this.status=status;this.headers=headers},end(text){try{resolve({status:this.status,headers:this.headers,data:JSON.parse(text||'{}')})}catch(error){reject(error)}}};
+    server.emit('request',req,res);
+  });
+}
+const original=(await call('GET','/api/meta')).data.suppliers[0];
+const admin=await call('POST','/api/bootstrap',{name:'Admin',email:'admin@local.test',password:'senha-segura'});
+const adminCookie=admin.headers['set-cookie'].split(';')[0];
+assert.equal((await call('POST','/api/register',{name:'Fornecedor',email:'fornecedor@local.test',password:'senha-segura',supplier_id:original.id})).status,201);
+const pending=(await call('GET','/api/admin/pending',undefined,adminCookie)).data.users[0];
+assert.equal((await call('POST','/api/admin/users/'+pending.id+'/approve',{role:'supplier'},adminCookie)).status,200);
+const created=await call('POST','/api/admin/users/'+pending.id+'/role',{role:'supplier',supplier_id:null,supplier_name:'Fornecedor de Teste do Admin'},adminCookie);
+assert.equal(created.status,200);
+const supplier=(await call('GET','/api/admin/manual-suppliers',undefined,adminCookie)).data.suppliers.find(row=>row.name==='Fornecedor de Teste do Admin');
+assert.ok(supplier);
+assert.equal((await call('POST','/api/admin/users/'+pending.id+'/role',{role:'supplier',supplier_name:'Fornecedor de Teste do Admin'},adminCookie)).status,409);
+assert.equal((await call('POST','/api/admin/manual-suppliers/'+supplier.id+'/archive',{},adminCookie)).status,409);
+const login=await call('POST','/api/login',{email:'fornecedor@local.test',password:'senha-segura'});
+const supplierCookie=login.headers['set-cookie'].split(';')[0];
+assert.equal(login.data.user.supplier_id,supplier.id);
+assert.equal((await call('GET','/api/admin/manual-suppliers',undefined,supplierCookie)).status,403);
+const delivery=new Date();delivery.setUTCDate(delivery.getUTCDate()+9);
+while(delivery.getUTCDay()===0)delivery.setUTCDate(delivery.getUTCDate()+1);
+const day=delivery.toISOString().slice(0,10);
+const booking=await call('POST','/api/bookings',{day,slot:'05:00',weight_kg:100,item_count:5,box_count:2,vehicle_type:'VUC',cargo_type:'Paletizada'},supplierCookie);
+assert.equal(booking.status,200);
+assert.equal((await call('POST','/api/admin/users/'+pending.id+'/role',{role:'supplier',supplier_id:original.id},adminCookie)).status,200);
+assert.equal((await call('POST','/api/admin/manual-suppliers/'+supplier.id+'/archive',{},adminCookie)).status,200);
+assert.equal((await call('GET','/api/meta')).data.suppliers.some(row=>row.id===supplier.id),false);
+assert.equal((await call('GET','/api/bookings?from='+day+'&to='+day,undefined,adminCookie)).data.bookings.some(row=>row.supplier_id===supplier.id),true);
+assert.equal((await call('POST','/api/admin/users/'+pending.id+'/role',{role:'supplier',supplier_id:supplier.id},adminCookie)).status,400);
+console.log('PASS: cadastro pelo modal, vínculo, exclusão protegida e histórico preservado');
+server.close();

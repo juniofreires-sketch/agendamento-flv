@@ -8,7 +8,7 @@ const api = async (url, method='GET', body) => {
   if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a operação.');
   return data;
 };
-const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardTab:'general',dashboardSupplierRows:[],dashboardDay:'',dashboardDayPage:0,arrivalDay:'',arrivalTab:'pending',arrivals:[],arrivalRequest:0,delayFrom:'',delayTo:'',delaySuppliers:[],delayRequest:0,delayDetailRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],slotBlocked:false,availabilityRequest:0,bookingNoticeAcknowledged:false,bookings:[],pending:[],adminUsers:[],userSearch:'',userRoleFilter:'',blockedDays:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
+const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardTab:'general',dashboardSupplierRows:[],dashboardDay:'',dashboardDayPage:0,arrivalDay:'',arrivalTab:'pending',arrivals:[],arrivalRequest:0,delayFrom:'',delayTo:'',delaySuppliers:[],delayRequest:0,delayDetailRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],slotBlocked:false,availabilityRequest:0,bookingNoticeAcknowledged:false,bookings:[],pending:[],adminUsers:[],manualSuppliers:[],userSearch:'',userRoleFilter:'',blockedDays:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
 let notificationTimer;
 let bookingNoticeReturnFocus=null;
 const notificationStorageKey = id => 'flv-notifications-seen:'+id;
@@ -139,6 +139,7 @@ function showApp(){
   navigate(state.view);
 }
 function navigate(view){
+  closeDashboardZoom();
   closeNotifications();
   if(!allowedViews(state.user.role).includes(view))view=defaultView(state.user.role);
   state.view=view;
@@ -161,7 +162,43 @@ function bookingTable(rows,actions=true,adminCheck=false){
   return '<div class="table-wrap"><table class="data-table"><thead><tr><th>Senha</th><th>Data e horário</th><th>Fornecedor</th><th>Carga</th><th>Situação</th><th></th></tr></thead><tbody>'+rows.map(b=>'<tr><td><span class="cell-title">#'+String(b.id).padStart(3,'0')+'</span><span class="cell-sub">'+esc(b.vehicle_type)+'</span></td><td><span class="cell-title">'+dateBR(b.day)+'</span><span class="cell-sub">'+esc(b.slot)+'</span></td><td><span class="cell-title">'+esc(b.supplier_name)+'</span></td><td><span class="cell-title">'+formatWeight(b.weight_kg)+' kg</span><span class="cell-sub">'+formatNum(b.box_count)+' caixas · '+formatNum(b.item_count)+' itens</span></td><td><span class="badge '+b.status+'">'+bookingStatusLabel(b.status)+'</span></td><td><div class="mini-actions"><button type="button" class="btn" data-ticket="'+b.id+'">Senha</button>'+(adminCheck&&b.status==='active'&&b.day<=today()?'<button type="button" class="btn btn-no-show" data-no-show="'+b.id+'" title="Marcar como No show">Check</button>':'')+(actions&&b.status==='active'?'<button type="button" class="btn btn-danger" data-cancel="'+b.id+'">Cancelar</button>':'')+'</div></td></tr>').join('')+'</tbody></table></div>';
 }
 const weekdayName=day=>new Intl.DateTimeFormat('pt-BR',{weekday:'long'}).format(new Date(day+'T12:00:00Z')).replace(/^./,letter=>letter.toUpperCase());
+let expandedDashboardCard=null;
+function closeDashboardZoom(){
+  if(!expandedDashboardCard)return;
+  const card=expandedDashboardCard;
+  card.classList.remove('dashboard-zoomed');card.removeAttribute('role');card.removeAttribute('aria-modal');
+  card.querySelector('[data-card-zoom]')?.setAttribute('aria-label','Ampliar painel');
+  document.querySelector('.dashboard-zoom-backdrop')?.remove();
+  document.body.classList.remove('dashboard-has-zoom');
+  expandedDashboardCard=null;
+}
+function toggleDashboardZoom(button){
+  const card=button.closest('[data-zoom-panel]');
+  if(!card)return;
+  if(expandedDashboardCard===card){closeDashboardZoom();button.focus();return}
+  closeDashboardZoom();
+  const backdrop=document.createElement('div');backdrop.className='dashboard-zoom-backdrop';
+  backdrop.addEventListener('click',closeDashboardZoom);
+  document.body.append(backdrop);
+  expandedDashboardCard=card;
+  card.classList.add('dashboard-zoomed');card.setAttribute('role','dialog');card.setAttribute('aria-modal','true');
+  button.setAttribute('aria-label','Fechar painel ampliado');
+  document.body.classList.add('dashboard-has-zoom');button.focus();
+}
+function enableDashboardZoom(){
+  const selector=state.dashboardTab==='arrivals'?'.cd-analytics-grid .cd-section':'.stat-grid .stat-card, .charts-grid .section-card';
+  $('#dashBody').querySelectorAll(selector).forEach(card=>{
+    card.dataset.zoomPanel='';
+    const body=document.createElement('div');body.className='dashboard-zoom-body';
+    while(card.firstChild)body.append(card.firstChild);
+    const button=document.createElement('button');button.type='button';button.className='dashboard-zoom-button';button.dataset.cardZoom='';
+    button.setAttribute('aria-label','Ampliar painel');button.title='Ampliar painel';
+    button.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M3 16v5h5m13-5v5h-5"/></svg>';
+    card.append(body,button);
+  });
+}
 async function renderDashboard(){
+  closeDashboardZoom();
   const requestId=++state.dashRequest;
   const admin=state.user.role==='admin',commercial=['commercial','cd'].includes(state.user.role);
   const tabs='<div class="dashboard-view-tabs" role="group" aria-label="Subabas do Dashboard"><button type="button" data-dashboard-tab="general" class="'+(state.dashboardTab==='general'?'active':'')+'" aria-pressed="'+(state.dashboardTab==='general')+'">Visão geral</button><button type="button" data-dashboard-tab="arrivals" class="'+(state.dashboardTab==='arrivals'?'active':'')+'" aria-pressed="'+(state.dashboardTab==='arrivals')+'">Chegadas CD</button></div>';
@@ -198,6 +235,7 @@ async function renderDashboard(){
     const donutStyle=totalBookings?'background:conic-gradient('+slices+')':'background:#e7eef8';
     const legend=cargo.map(x=>'<div class="chart-legend-item"><i style="background:'+colors[x.index]+'"></i><span>'+esc(x.name)+'</span><strong>'+formatNum(x.count)+'</strong></div>').join('');
     $('#dashBody').innerHTML='<div class="stat-grid">'+cards.map(c=>'<div class="card stat-card"><div class="stat-icon">'+c[0]+'</div><p class="stat-label">'+c[1]+'</p><p class="stat-value">'+c[2]+'<span class="stat-unit">'+c[3]+'</span></p></div>').join('')+'</div>'+'<div class="charts-grid"><div class="card section-card"><div class="section-head"><div><h3>Fornecedores por data</h3><p>Fornecedores com agendamentos confirmados no período</p></div></div><div class="weekday-chart daily-supplier-chart admin-details">'+dailyChart+'</div></div>'+'<div class="card section-card"><div class="section-head"><div><h3>Tipos de carga</h3><p>Distribuição dos agendamentos confirmados</p></div></div><div class="cargo-chart"><div class="donut-chart" style="'+donutStyle+'"><div><strong>'+formatNum(totalBookings)+'</strong><small>entregas</small></div></div><div class="chart-legend">'+legend+'</div></div></div></div>'+'<div class="dashboard-history card"><div><strong>Atrasos na chegada</strong><span>Consulte fornecedores com atrasos e veja cada ocorrência por data.</span></div><button class="btn" type="button" data-delay-open>Ver atrasos →</button></div>'+(admin?'<div class="dashboard-history card"><div><strong>Precisa consultar uma entrega?</strong><span>Pesquise o histórico com data, situação e fornecedor.</span></div><button class="btn" type="button" data-history-open>Abrir histórico →</button></div>':'');
+    enableDashboardZoom();
   }catch(error){if(requestId!==state.dashRequest)return;$('#dashBody').innerHTML='<div class="empty-state">'+esc(error.message)+'</div>';toast(error.message,true)}
 }
 const negativeDelay=minutes=>'-'+durationLabel(minutes);
@@ -231,11 +269,12 @@ async function renderArrivalPerformance(requestId){
     const dailyMax=Math.max(1,...days.map(row=>Number(row.scheduled||0)));
     const daily=days.length?'<div class="cd-daily-list">'+days.map(row=>'<div class="cd-daily-row"><span>'+dateBR(row.day)+'</span><div class="cd-daily-track"><i style="width:'+(Number(row.recorded||0)/dailyMax*100)+'%"></i></div><span>'+formatNum(row.recorded)+' / '+formatNum(row.scheduled)+' chegadas</span><div class="cd-day-results"><strong class="'+(Number(row.late)>0?'negative-time':'')+'">'+(Number(row.late)>0?formatNum(row.late)+' atraso(s) · '+negativeDelay(row.late_minutes):'Sem atraso')+'</strong><small class="no-show-value">'+formatNum(row.no_show)+' No show</small></div></div>').join('')+'</div>':'<div class="empty-state">Nenhum agendamento no período selecionado.</div>';
     const slots=result.slots||[];
-    const slotTable=slots.length?'<div class="table-wrap"><table class="data-table cd-performance-table"><thead><tr><th>Horário</th><th>Agendados</th><th>Chegadas</th><th>Atrasos</th><th>No show</th><th>Tempo perdido</th></tr></thead><tbody>'+slots.map(row=>'<tr><td><strong>'+esc(String(row.slot).slice(0,5))+'</strong></td><td>'+formatNum(row.scheduled)+'</td><td>'+formatNum(row.recorded)+'</td><td>'+formatNum(row.late)+'</td><td class="no-show-value">'+formatNum(row.no_show)+'</td><td class="'+(Number(row.late)>0?'negative-time':'')+'">'+(Number(row.late)>0?negativeDelay(row.late_minutes):'—')+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state">Nenhum horário agendado neste período.</div>';
+    const slotTable=slots.length?'<div class="table-wrap cd-slot-wrap"><table class="data-table cd-performance-table cd-slot-table"><thead><tr><th>Horário</th><th>Agendados</th><th>Chegadas</th><th>Atrasos</th><th>No show</th><th>Tempo perdido</th></tr></thead><tbody>'+slots.map(row=>'<tr><td><strong>'+esc(String(row.slot).slice(0,5))+'</strong></td><td>'+formatNum(row.scheduled)+'</td><td>'+formatNum(row.recorded)+'</td><td>'+formatNum(row.late)+'</td><td class="no-show-value">'+formatNum(row.no_show)+'</td><td class="'+(Number(row.late)>0?'negative-time':'')+'">'+(Number(row.late)>0?negativeDelay(row.late_minutes):'-')+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state">Nenhum horário agendado neste período.</div>';
     $('#dashBody').innerHTML='<div class="cd-metrics">'+cards+'</div>'+
       '<div class="cd-status-strip card"><div><strong>'+punctuality+'</strong><span>Pontualidade: '+formatNum(onTime)+' no horário · '+formatNum(early)+' adiantadas</span></div><div><strong class="no-show-value">'+noShowPercent+'</strong><span>No show entre agendamentos até hoje</span></div><div><strong>'+formatNum(pending)+'</strong><span>Aguardando registro até hoje</span></div><div><strong>'+formatNum(upcoming)+'</strong><span>Agendamentos futuros</span></div><div><strong class="negative-time">'+(late?negativeDelay(totals.average_late_minutes):'—')+'</strong><span>Atraso médio por chegada atrasada</span></div></div>'+
       '<div class="cd-analytics-grid"><div class="card section-card cd-section"><div class="section-head"><div><h3>Fornecedores com mais atrasos</h3><p>Clique no nome para ver cada data.</p></div></div>'+topTable+'</div><div class="card section-card cd-section"><div class="section-head"><div><h3>Fornecedores com mais No show</h3><p>Ausências registradas e percentual sobre agendamentos até hoje.</p></div></div>'+noShowTable+'</div></div>'+
       '<div class="cd-analytics-grid"><div class="card section-card cd-section"><div class="section-head"><div><h3>Chegadas por data</h3><p>Registradas em relação aos agendamentos do período.</p></div></div>'+daily+'</div><div class="card section-card cd-section"><div class="section-head"><div><h3>Atrasos e No show por horário</h3><p>Compare os horários com mais ocorrências.</p></div></div>'+slotTable+'</div></div><p class="cd-panel-note">No show é calculado sobre os agendamentos até hoje no período; agendamentos futuros ficam fora do percentual. Tempo negativo em vermelho indica chegada após o horário agendado.</p>';
+    enableDashboardZoom();
   }catch(error){if(requestId!==state.dashRequest)return;$('#dashBody').innerHTML='<div class="empty-state">'+esc(error.message)+'</div>';toast(error.message,true)}
 }
 const dashboardDayPageSize=12;
@@ -495,7 +534,7 @@ function openUserRoleModal(id){
   const user=state.adminUsers.find(row=>String(row.id)===String(id));
   if(!user)return;
   state.editingUser=user;
-  $('#userRoleModalContent').innerHTML='<form id="userRoleForm"><p class="subtext">Escolha o perfil e, para Fornecedor, vincule a empresa que essa conta poderá acessar.</p><div class="field"><label for="userRole">Perfil</label><select id="userRole" name="role"><option value="admin"'+(user.role==='admin'?' selected':'')+'>Administrador</option><option value="supplier"'+(user.role==='supplier'?' selected':'')+'>Fornecedor</option><option value="commercial"'+(user.role==='commercial'?' selected':'')+'>Comercial</option><option value="cd"'+(user.role==='cd'?' selected':'')+'>CD</option></select></div><div id="userRoleSupplierField" class="field"><label for="userRoleSupplier">Fornecedor vinculado</label><select id="userRoleSupplier" name="supplier_id">'+supplierOptions(user.supplier_id)+'</select></div><div class="history-form-actions"><button type="button" class="btn" id="cancelUserRole">Cancelar</button><button type="submit" class="btn btn-primary">Salvar perfil</button></div></form>';
+  $('#userRoleModalContent').innerHTML='<form id="userRoleForm"><p class="subtext">Escolha o perfil e, para Fornecedor, vincule a empresa que essa conta poderá acessar.</p><div class="field"><label for="userRole">Perfil</label><select id="userRole" name="role"><option value="admin"'+(user.role==='admin'?' selected':'')+'>Administrador</option><option value="supplier"'+(user.role==='supplier'?' selected':'')+'>Fornecedor</option><option value="commercial"'+(user.role==='commercial'?' selected':'')+'>Comercial</option><option value="cd"'+(user.role==='cd'?' selected':'')+'>CD</option></select></div><div id="userRoleSupplierField" class="field"><label for="userRoleSupplierMode">Fornecedor</label><select id="userRoleSupplierMode"><option value="existing">Selecionar fornecedor cadastrado</option><option value="new">Cadastrar novo fornecedor</option></select><div id="userRoleExistingSupplier" class="field"><label for="userRoleSupplier">Fornecedor vinculado</label><select id="userRoleSupplier" name="supplier_id">'+supplierOptions(user.supplier_id)+'</select></div><div id="userRoleNewSupplier" class="field" hidden><label for="userRoleSupplierName">Nova razão social</label><input id="userRoleSupplierName" name="supplier_name" minlength="3" maxlength="160" placeholder="Nome completo do fornecedor"></div></div><div class="history-form-actions"><button type="button" class="btn" id="cancelUserRole">Cancelar</button><button type="submit" class="btn btn-primary">Salvar perfil</button></div></form>';
   $('#userRoleModal').classList.remove('hidden');
   updateUserRoleSupplierVisibility();
 }
@@ -503,7 +542,14 @@ function closeUserRoleModal(){$('#userRoleModal').classList.add('hidden');state.
 function updateUserRoleSupplierVisibility(){
   const field=$('#userRoleSupplierField');
   const role=$('#userRole')?.value;
-  if(field){field.hidden=role!=='supplier';$('#userRoleSupplier').required=role==='supplier'}
+  if(field){
+    const active=role==='supplier',isNew=$('#userRoleSupplierMode').value==='new';
+    field.hidden=!active;
+    $('#userRoleExistingSupplier').hidden=!active||isNew;
+    $('#userRoleNewSupplier').hidden=!active||!isNew;
+    $('#userRoleSupplier').required=active&&!isNew;
+    $('#userRoleSupplierName').required=active&&isNew;
+  }
 }
 function updateDailyLimitPreview(){
   const start=$('#scheduleStart'),end=$('#scheduleEnd'),intervalField=$('#scheduleInterval'),capacityField=$('#scheduleCapacity'),limit=$('#scheduleDailyLimit');
@@ -521,9 +567,18 @@ function renderAdmin(){
   $('#viewContent').innerHTML=pageHead('ADMINISTRAÇÃO','Configurações','Cadastre fornecedores e configure as regras que valem para todos os agendamentos.')+
   '<div class="card section-card"><div class="section-head"><div><h3>Sistemática global de agendamento</h3><p>As regras salvas serão aplicadas a todos os fornecedores.</p></div></div><form id="schedulingForm" class="settings-form"><div class="field-row"><div class="field"><label for="scheduleStart">Início da janela</label><input id="scheduleStart" name="start_time" type="time" step="1800" value="'+esc(rules.start_time)+'" required></div><div class="field"><label for="scheduleEnd">Final da janela</label><input id="scheduleEnd" name="end_time" type="time" step="1800" value="'+esc(rules.end_time)+'" required><small>O horário final é o início da última faixa disponível.</small></div></div><div class="field-row"><div class="field"><label for="scheduleInterval">Intervalo entre faixas</label><select id="scheduleInterval" name="interval_minutes"><option value="30"'+(Number(rules.interval_minutes)===30?' selected':'')+'>A cada meia hora</option><option value="60"'+(Number(rules.interval_minutes)===60?' selected':'')+'>A cada hora</option></select></div><div class="field"><label for="scheduleCapacity">Carros por faixa</label><input id="scheduleCapacity" name="vehicles_per_slot" type="number" min="1" max="10000" step="1" value="'+esc(rules.vehicles_per_slot)+'" required></div></div><div class="field"><label for="scheduleDailyLimit">Limite de veículos por dia</label><input id="scheduleDailyLimit" name="daily_vehicle_limit" type="number" min="1" max="1000000" step="1" value="'+esc(rules.daily_vehicle_limit)+'" readonly required><small>Calculado automaticamente: faixas disponíveis × carros por faixa.</small></div><button type="submit" class="btn btn-primary">Salvar sistemática</button></form></div>'+
   '<div class="card section-card blocked-days-card"><div class="section-head"><div><h3>Dias sem agendamento</h3><p>Bloqueie datas de feriado, manutenção ou parada da operação. Domingos já são bloqueados automaticamente.</p></div></div><form id="blockedDayForm" class="blocked-day-form"><div class="field"><label for="blockedDay">Data a bloquear</label><input id="blockedDay" name="day" type="date" min="'+dateOffset(today(),1)+'" required></div><button type="submit" class="btn btn-primary">Bloquear dia</button></form><div id="blockedDaysList" class="blocked-days-list" aria-live="polite">Carregando datas...</div><small class="blocked-days-note">O bloqueio impede novos agendamentos. Agendamentos já confirmados para a data continuam registrados.</small></div>'+
-  '<div class="card supplier-card admin-supplier-card"><div class="section-head"><div><h3>Novo fornecedor</h3><p>Somente administradores podem cadastrar empresas diretamente.</p></div></div><form id="supplierForm"><div class="field"><label for="newSupplier">Razão social</label><input id="newSupplier" name="name" minlength="3" maxlength="160" required placeholder="Nome completo do fornecedor"></div><button type="submit" class="btn btn-primary">Cadastrar fornecedor</button></form><div class="info-panel" style="margin-top:22px"><h3>Base cadastrada</h3><p><strong>'+state.meta.suppliers.length+' fornecedores</strong> disponíveis para seleção.</p></div></div>';
+  '<div class="card supplier-card admin-supplier-card"><div class="section-head"><div><h3>Novo fornecedor</h3><p>Somente administradores podem cadastrar empresas diretamente.</p></div></div><form id="supplierForm"><div class="field"><label for="newSupplier">Razão social</label><input id="newSupplier" name="name" minlength="3" maxlength="160" required placeholder="Nome completo do fornecedor"></div><button type="submit" class="btn btn-primary">Cadastrar fornecedor</button></form><div class="info-panel" style="margin-top:22px"><h3>Base cadastrada</h3><p><strong>'+state.meta.suppliers.length+' fornecedores</strong> disponíveis para seleção.</p></div><div class="manual-suppliers"><h3>Fornecedores criados manualmente</h3><p>Exclua fornecedores de teste ou cadastrados por administradores. Agendamentos anteriores permanecem no histórico.</p><div id="manualSuppliersList">Carregando fornecedores...</div></div></div>';
   updateDailyLimitPreview();
   refreshBlockedDays();
+  refreshManualSuppliers();
+}
+function renderManualSuppliers(){
+  const target=$('#manualSuppliersList');if(!target)return;
+  target.innerHTML=state.manualSuppliers.length?state.manualSuppliers.map(row=>'<div class="manual-supplier-item"><strong>'+esc(row.name)+'</strong><button type="button" class="btn btn-danger" data-archive-supplier="'+row.id+'">Excluir</button></div>').join(''):'<span>Nenhum fornecedor criado manualmente.</span>';
+}
+async function refreshManualSuppliers(){
+  try{state.manualSuppliers=(await api('/api/admin/manual-suppliers')).suppliers||[];renderManualSuppliers()}
+  catch(error){const target=$('#manualSuppliersList');if(target)target.textContent=error.message;toast(error.message,true)}
 }
 function renderBlockedDays(){
   const target=$('#blockedDaysList');if(!target)return;
@@ -637,6 +692,7 @@ document.addEventListener('click',async e=>{
   if(!e.target.closest('[data-supplier-combo]'))closeSupplierCombos();
   const auth=e.target.closest('[data-auth]');if(auth)return showAuth(auth.dataset.auth);
   const dashboardTab=e.target.closest('[data-dashboard-tab]');if(dashboardTab){state.dashboardTab=dashboardTab.dataset.dashboardTab;renderDashboard();return}
+  const zoom=e.target.closest('[data-card-zoom]');if(zoom){toggleDashboardZoom(zoom);return}
   const view=e.target.closest('[data-view]');if(view)return navigate(view.dataset.view);
   const history=e.target.closest('[data-history-open]');if(history)return openHistoryModal();
   if(e.target.closest('[data-delay-open]')){openDelayModal();return}
@@ -668,6 +724,14 @@ document.addEventListener('click',async e=>{
   if(markNoShow){if(!confirm('Confirmar que o fornecedor não compareceu? O agendamento será marcado como No show.'))return;try{await api('/api/bookings/'+markNoShow.dataset.noShow+'/no-show','POST',{});toast('Agendamento marcado como No show.');await refreshBookings()}catch(err){toast(err.message,true)}return}
   const approve=e.target.closest('[data-approve]');
   if(approve){try{const role=approve.closest('.pending-item').querySelector('[data-approve-role]').value;await api('/api/admin/users/'+approve.dataset.approve+'/approve','POST',{role});toast('Acesso de '+roleNames[role].toLowerCase()+' aprovado.');await Promise.all([refreshPending(),refreshAdminUsers()]);state.meta=await api('/api/meta')}catch(err){toast(err.message,true)}return}
+  const archive=e.target.closest('[data-archive-supplier]');
+  if(archive){
+    const supplier=state.manualSuppliers.find(row=>String(row.id)===archive.dataset.archiveSupplier);
+    if(!supplier||!confirm('Excluir '+supplier.name+' da lista de fornecedores disponíveis?'))return;
+    try{await api('/api/admin/manual-suppliers/'+supplier.id+'/archive','POST',{});state.meta=await api('/api/meta');await refreshManualSuppliers();const count=$('.admin-supplier-card .info-panel strong');if(count)count.textContent=state.meta.suppliers.length+' fornecedores';toast('Fornecedor excluído da lista de seleção.')}
+    catch(error){toast(error.message,true)}
+    return;
+  }
   if(e.target.id==='applyBookings'){
     state.bookFrom=$('#bookFrom').value;state.bookTo=$('#bookTo').value;state.bookSupplier=$('#bookSupplier')?.value||'';
     return refreshBookings();
@@ -693,7 +757,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshNotifications()});
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){closeNotifications();closeSupplierCombos();closeHistoryModal();closeUserRoleModal();closeBookingCapacityModal();closeBookingNotice();closeDashboardDayModal();closeDelayModal();return}
+  if(e.key==='Escape'){closeDashboardZoom();closeNotifications();closeSupplierCombos();closeHistoryModal();closeUserRoleModal();closeBookingCapacityModal();closeBookingNotice();closeDashboardDayModal();closeDelayModal();return}
   if(e.key==='Enter'&&e.target.matches('[data-combo-search]')){
     const first=e.target.closest('[data-supplier-combo]').querySelector('[data-combo-option]');
     if(first){e.preventDefault();first.click()}
@@ -728,7 +792,7 @@ document.addEventListener('change',e=>{
     state.selectedSlot='';
     refreshAvailableSlots(state.slotDay);
   }
-  if(e.target.id==='userRole')updateUserRoleSupplierVisibility();
+  if(e.target.id==='userRole'||e.target.id==='userRoleSupplierMode')updateUserRoleSupplierVisibility();
   if(e.target.id==='scheduleInterval')updateDailyLimitPreview();
 });
 document.addEventListener('submit',async e=>{
@@ -798,7 +862,9 @@ document.addEventListener('submit',async e=>{
       await renderAdmin();
     }
     if(form.id==='userRoleForm'){
-      if(values.role==='supplier'&&!values.supplier_id)throw new Error('Selecione um fornecedor para este usuário.');
+      const creating=values.role==='supplier'&&$('#userRoleSupplierMode').value==='new';
+      if(creating){values.supplier_id=null;values.supplier_name=String(values.supplier_name||'').trim().replace(/\s+/g,' ');if(values.supplier_name.length<3)throw new Error('Informe a razão social do novo fornecedor.');}
+      else{values.supplier_name='';if(values.role==='supplier'&&!values.supplier_id)throw new Error('Selecione um fornecedor para este usuário.');}
       values.supplier_id=values.supplier_id?Number(values.supplier_id):null;
       await api('/api/admin/users/'+state.editingUser.id+'/role','POST',values);
       closeUserRoleModal();

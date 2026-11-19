@@ -20,6 +20,10 @@ db.exec([
 ].join(';\n') + ';');
 if (!db.prepare('PRAGMA table_info(users)').all().some(col => col.name === 'requested_supplier_name'))
   db.exec('ALTER TABLE users ADD COLUMN requested_supplier_name TEXT');
+if (!db.prepare('PRAGMA table_info(suppliers)').all().some(col => col.name === 'created_by'))
+  db.exec('ALTER TABLE suppliers ADD COLUMN created_by TEXT');
+if (!db.prepare('PRAGMA table_info(suppliers)').all().some(col => col.name === 'archived_at'))
+  db.exec('ALTER TABLE suppliers ADD COLUMN archived_at TEXT');
 const usersTableSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get()?.sql || '';
 if (!usersTableSql.includes("'cd'")) {
   db.exec(`PRAGMA foreign_keys=OFF;
@@ -215,7 +219,7 @@ const server = http.createServer(async (req,res) => {
       if (origin && new URL(origin).host !== req.headers.host) return fail(res,403,'Origem não autorizada.');
     }
     if (req.method === 'GET' && p === '/api/meta') {
-      const suppliers = db.prepare('SELECT id,name FROM suppliers ORDER BY name').all().map(supplierRow);
+      const suppliers = db.prepare('SELECT id,name FROM suppliers WHERE archived_at IS NULL ORDER BY name').all().map(supplierRow);
       return json(res,200,{suppliers,vehicleTypes,cargoTypes,scheduling:getSchedulingSettings(),bootstrap:db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='admin'").get().n === 0,googleEnabled:false,today:nowParts().day,current_time:nowParts().time});
     }
     if (req.method === 'GET' && p === '/api/availability') {
@@ -268,7 +272,7 @@ const server = http.createServer(async (req,res) => {
       const day = String(b.day||''), weight = Number(b.weight_kg), items = Number(b.item_count), boxes = b.box_count===''||b.box_count==null?0:Number(b.box_count);
       const settings = getSchedulingSettings();
       const supplierId = user.role === 'admin' ? Number(b.supplier_id) : user.supplier_id;
-      if (!db.prepare('SELECT id FROM suppliers WHERE id=?').get(supplierId)) return fail(res,400,'Selecione um fornecedor válido.');
+      if (!db.prepare('SELECT id FROM suppliers WHERE id=? AND archived_at IS NULL').get(supplierId)) return fail(res,400,'Selecione um fornecedor disponível.');
       if (!isValidDay(day) || isSunday(day) || day <= nowParts().day) return fail(res,400,'Os agendamentos estão disponíveis de segunda a sábado, somente a partir do dia seguinte. Para entregas fora da janela, entre em contato com o setor comercial.');
       if (blockedBookingDay(day)) return fail(res,409,'Os agendamentos para '+day.split('-').reverse().join('/')+' estão bloqueados. Escolha outra data.');
       if (!Number.isFinite(weight) || weight <= 0 || !Number.isInteger(items) || items < 0 || !Number.isInteger(boxes) || boxes < 0) return fail(res,400,'Informe peso positivo e quantidades inteiras maiores ou iguais a zero.');
@@ -493,11 +497,19 @@ const server = http.createServer(async (req,res) => {
       if (updateRole[1]===admin.id) return fail(res,400,'Não é possível alterar o próprio perfil.');
       const b=await readBody(req), role=String(b.role||''), selected=Number(b.supplier_id||0);
       if(!['admin','supplier','commercial','cd'].includes(role)) return fail(res,400,'Selecione Administrador, Fornecedor, Comercial ou CD.');
-      if(role==='supplier'&&!db.prepare('SELECT id FROM suppliers WHERE id=?').get(selected)) return fail(res,400,'Selecione um fornecedor para este usuário.');
       const target=db.prepare('SELECT id,status FROM users WHERE id=?').get(updateRole[1]);
       if(!target) return fail(res,404,'Usuário não encontrado.');
       if(target.status!=='active') return fail(res,400,'Altere o perfil pela aprovação pendente deste usuário.');
-      db.prepare('UPDATE users SET role=?,supplier_id=?,requested_supplier_name=NULL WHERE id=?').run(role,role==='supplier'?selected:null,updateRole[1]);
+      const name=String(b.supplier_name||'').trim().replace(/\s+/g,' ');
+      if(role==='supplier'&&name&&(selected||name.length<3||name.length>160))return fail(res,400,'Escolha um fornecedor existente ou informe uma nova razão social com 3 a 160 caracteres.');
+      if(role==='supplier'&&!name&&!db.prepare('SELECT id FROM suppliers WHERE id=? AND archived_at IS NULL').get(selected)) return fail(res,400,'Selecione um fornecedor disponível para este usuário.');
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        let supplierId=selected;
+        if(role==='supplier'&&name)supplierId=Number(db.prepare('INSERT INTO suppliers(name,created_by) VALUES (?,?)').run(name,admin.id).lastInsertRowid);
+        db.prepare('UPDATE users SET role=?,supplier_id=?,requested_supplier_name=NULL WHERE id=?').run(role,role==='supplier'?supplierId:null,updateRole[1]);
+        db.exec('COMMIT');
+      } catch (error) {db.exec('ROLLBACK');if(String(error.message).includes('UNIQUE'))return fail(res,409,'Este fornecedor já está cadastrado.');throw error}
       return json(res,200,{ok:true});
     }
     if (req.method === 'POST' && /^\/api\/admin\/users\/[a-f0-9]+\/approve$/.test(p)) {
@@ -533,13 +545,27 @@ const server = http.createServer(async (req,res) => {
       return json(res,200,{ok:true});
     }
     if (req.method === 'POST' && p === '/api/admin/suppliers') {
-      if (!requireUser(req,res,true)) return;
+      const admin=requireUser(req,res,true); if (!admin) return;
       const b=await readBody(req), name=String(b.name||'').trim().replace(/\s+/g,' ');
       if (name.length<3 || name.length>160) return fail(res,400,'Informe a razão social com 3 a 160 caracteres.');
       try {
-        const out=db.prepare('INSERT INTO suppliers(name) VALUES (?)').run(name);
+        const out=db.prepare('INSERT INTO suppliers(name,created_by) VALUES (?,?)').run(name,admin.id);
         return json(res,201,{supplier:{id:Number(out.lastInsertRowid),name}});
       } catch { return fail(res,409,'Este fornecedor já está cadastrado.'); }
+    }
+    if (req.method === 'GET' && p === '/api/admin/manual-suppliers') {
+      if (!requireUser(req,res,true)) return;
+      return json(res,200,{suppliers:db.prepare('SELECT id,name FROM suppliers WHERE created_by IS NOT NULL AND archived_at IS NULL ORDER BY name').all()});
+    }
+    const archiveSupplier=/^\/api\/admin\/manual-suppliers\/(\d+)\/archive$/.exec(p);
+    if (req.method === 'POST' && archiveSupplier) {
+      if (!requireUser(req,res,true)) return;
+      const id=Number(archiveSupplier[1]);
+      const supplier=db.prepare('SELECT id FROM suppliers WHERE id=? AND created_by IS NOT NULL AND archived_at IS NULL').get(id);
+      if(!supplier)return fail(res,404,'Fornecedor criado manualmente não encontrado.');
+      if(db.prepare('SELECT id FROM users WHERE supplier_id=? LIMIT 1').get(id))return fail(res,409,'Altere o vínculo dos usuários deste fornecedor antes de excluí-lo.');
+      db.prepare("UPDATE suppliers SET archived_at=CURRENT_TIMESTAMP WHERE id=?").run(id);
+      return json(res,200,{ok:true});
     }
     return fail(res,404,'Página não encontrada.');
   } catch (e) {

@@ -53,7 +53,7 @@ export async function api(path,method='GET',body){
   const p=url.pathname;
   if(p==='/api/meta'&&method==='GET'){
     const [{data,error},{data:scheduling,error:schedulingError},settings]=await Promise.all([
-      supabase.from('suppliers').select('id,name').order('name').limit(1000),
+      supabase.from('suppliers').select('id,name').is('archived_at',null).order('name').limit(1000),
       supabase.from('scheduling_settings').select('start_time,end_time,interval_minutes,vehicles_per_slot,daily_vehicle_limit').eq('id',1).single(),
       fetch(__SUPABASE_URL__+'/auth/v1/settings',{headers:{apikey:__SUPABASE_PUBLISHABLE_KEY__}})
         .then(response=>response.ok?response.json():null).catch(()=>null)
@@ -287,8 +287,9 @@ export async function api(path,method='GET',body){
   }
   const updateRole=/^\/api\/admin\/users\/([a-f0-9-]+)\/role$/.exec(p);
   if(updateRole&&method==='POST'){
-    const {error}=await supabase.rpc('admin_update_user_role',{
-      p_user_id:updateRole[1],p_role:body?.role,p_supplier_id:body?.supplier_id?Number(body.supplier_id):null
+    const {error}=await supabase.rpc('admin_update_user_role_with_supplier',{
+      p_user_id:updateRole[1],p_role:body?.role,p_supplier_id:body?.supplier_id?Number(body.supplier_id):null,
+      p_supplier_name:String(body?.supplier_name||'').trim()
     });
     fail(error);return {ok:true};
   }
@@ -299,8 +300,19 @@ export async function api(path,method='GET',body){
   }
   if(p==='/api/admin/suppliers'&&method==='POST'){
     const name=String(body.name||'').trim().replace(/\s+/g,' ');
-    const {data,error}=await supabase.from('suppliers').insert({name}).select('id,name').single();
+    const {data,error}=await supabase.rpc('admin_create_supplier',{p_name:name});
     fail(error);return {supplier:data};
+  }
+  if(p==='/api/admin/manual-suppliers'&&method==='GET'){
+    const profile=await signedInProfile();
+    if(!profile||profile.role!=='admin')throw new Error('Apenas administradores podem consultar fornecedores criados manualmente.');
+    const {data,error}=await supabase.from('suppliers').select('id,name,archived_at').not('created_by','is',null).is('archived_at',null).order('name');
+    fail(error);return {suppliers:data||[]};
+  }
+  const archiveSupplier=/^\/api\/admin\/manual-suppliers\/(\d+)\/archive$/.exec(p);
+  if(archiveSupplier&&method==='POST'){
+    const {error}=await supabase.rpc('admin_archive_supplier',{p_supplier_id:Number(archiveSupplier[1])});
+    fail(error);return {ok:true};
   }
   throw new Error('Operação não disponível.');
 }
