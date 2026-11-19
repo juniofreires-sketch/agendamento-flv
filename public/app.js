@@ -195,8 +195,7 @@ function toggleDashboardZoom(button){
   document.body.classList.add('dashboard-has-zoom');button.focus();
 }
 function enableDashboardZoom(){
-  const selector=state.dashboardTab==='arrivals'?'.cd-analytics-grid .cd-section':'.stat-grid .stat-card, .charts-grid .section-card';
-  $('#dashBody').querySelectorAll(selector).forEach(card=>{
+  $('#dashBody').querySelectorAll('.cd-analytics-grid .cd-section').forEach(card=>{
     card.dataset.zoomPanel='';
     const body=document.createElement('div');body.className='dashboard-zoom-body';
     while(card.firstChild)body.append(card.firstChild);
@@ -244,7 +243,6 @@ async function renderDashboard(){
     const donutStyle=totalBookings?'background:conic-gradient('+slices+')':'background:#e7eef8';
     const legend=cargo.map(x=>'<div class="chart-legend-item"><i style="background:'+colors[x.index]+'"></i><span>'+esc(x.name)+'</span><strong>'+formatNum(x.count)+'</strong></div>').join('');
     $('#dashBody').innerHTML='<div class="stat-grid">'+cards.map(c=>'<div class="card stat-card"><div class="stat-icon">'+c[0]+'</div><p class="stat-label">'+c[1]+'</p><p class="stat-value">'+c[2]+'<span class="stat-unit">'+c[3]+'</span></p></div>').join('')+'</div>'+'<div class="charts-grid"><div class="card section-card"><div class="section-head"><div><h3>Fornecedores por data</h3><p>Fornecedores com agendamentos confirmados no período</p></div></div><div class="weekday-chart daily-supplier-chart admin-details">'+dailyChart+'</div></div>'+'<div class="card section-card"><div class="section-head"><div><h3>Tipos de carga</h3><p>Distribuição dos agendamentos confirmados</p></div></div><div class="cargo-chart"><div class="donut-chart" style="'+donutStyle+'"><div><strong>'+formatNum(totalBookings)+'</strong><small>entregas</small></div></div><div class="chart-legend">'+legend+'</div></div></div></div>'+'<div class="dashboard-history card"><div><strong>Atrasos na chegada</strong><span>Consulte fornecedores com atrasos e veja cada ocorrência por data.</span></div><button class="btn" type="button" data-delay-open>Ver atrasos →</button></div>'+(admin?'<div class="dashboard-history card"><div><strong>Precisa consultar uma entrega?</strong><span>Pesquise o histórico com data, situação e fornecedor.</span></div><button class="btn" type="button" data-history-open>Abrir histórico →</button></div>':'');
-    enableDashboardZoom();
   }catch(error){if(requestId!==state.dashRequest)return;$('#dashBody').innerHTML='<div class="empty-state">'+esc(error.message)+'</div>';toast(error.message,true)}
 }
 const negativeDelay=minutes=>'-'+durationLabel(minutes);
