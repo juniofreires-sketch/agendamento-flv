@@ -59,6 +59,15 @@ db.exec(`CREATE TABLE IF NOT EXISTS booking_arrivals (
   recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );`);
+db.exec(`CREATE TABLE IF NOT EXISTS unscheduled_arrivals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+  day TEXT NOT NULL,
+  arrival_time TEXT NOT NULL,
+  recorded_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS unscheduled_arrivals_day_idx ON unscheduled_arrivals(day,supplier_id);`);
 
 const cleanSupplierName = name => String(name).trim().replace(/^[0-9][0-9./-]*\s+/, '').replace(/\s+/g, ' ');
 const seed = [...new Set(JSON.parse(fs.readFileSync(path.join(root, 'suppliers.json'), 'utf8')).map(cleanSupplierName))];
@@ -372,6 +381,24 @@ const server = http.createServer(async (req,res) => {
       return json(res,200,{totals,days:Array.from(days.values()).sort((a,b)=>a.day.localeCompare(b.day)),top_suppliers,top_no_show,
         slots:Array.from(slots.values()).sort((a,b)=>a.slot.localeCompare(b.slot))});
     }
+    if (req.method === 'GET' && p === '/api/dashboard/unscheduled-arrivals') {
+      const user=requireUser(req,res);if(!user)return;
+      if(!['admin','commercial','cd'].includes(user.role))return fail(res,403,'Sem permissão para consultar veículos fora da agenda.');
+      const from=url.searchParams.get('from')||nowParts().day,to=url.searchParams.get('to')||nowParts().day;
+      if(!isValidDay(from)||!isValidDay(to)||from>to)return fail(res,400,'Período inválido.');
+      const supplierId=Number(url.searchParams.get('supplier_id')||0);
+      if(supplierId&&user.role!=='admin')return fail(res,403,'Apenas administradores podem filtrar por fornecedor.');
+      const throughDay=to<nowParts().day?to:nowParts().day;
+      const scheduled=db.prepare("SELECT COUNT(*) AS n FROM bookings WHERE status IN ('active','no_show') AND day BETWEEN ? AND ? AND (?=0 OR supplier_id=?)").get(from,throughDay,supplierId,supplierId).n;
+      const unscheduled=db.prepare('SELECT COUNT(*) AS n FROM unscheduled_arrivals WHERE day BETWEEN ? AND ? AND (?=0 OR supplier_id=?)').get(from,throughDay,supplierId,supplierId).n;
+      const top=db.prepare(`SELECT u.supplier_id,s.name AS supplier_name,COUNT(*) AS unscheduled,
+        (SELECT COUNT(*) FROM bookings b WHERE b.supplier_id=u.supplier_id AND b.status IN ('active','no_show') AND b.day BETWEEN ? AND ?) AS scheduled
+        FROM unscheduled_arrivals u JOIN suppliers s ON s.id=u.supplier_id
+        WHERE u.day BETWEEN ? AND ? AND (?=0 OR u.supplier_id=?)
+        GROUP BY u.supplier_id,s.name ORDER BY unscheduled DESC,s.name LIMIT 10`).all(from,throughDay,from,throughDay,supplierId,supplierId);
+      return json(res,200,{scheduled,unscheduled,unscheduled_percent:scheduled+unscheduled?Math.round(unscheduled*1000/(scheduled+unscheduled))/10:0,
+        top_suppliers:top.map(row=>({...row,percent:Math.round(row.unscheduled*1000/(row.scheduled+row.unscheduled))/10}))});
+    }
     if (req.method === 'GET' && p === '/api/arrivals') {
       const user=requireUser(req,res);if(!user)return;
       if(!['admin','cd'].includes(user.role))return fail(res,403,'Apenas CD e administradores podem consultar chegadas.');
@@ -379,6 +406,26 @@ const server = http.createServer(async (req,res) => {
       if(!isValidDay(day))return fail(res,400,'Informe uma data válida.');
       const rows=db.prepare(`SELECT b.*,s.name AS supplier_name,a.arrival_time,a.recorded_at FROM bookings b JOIN suppliers s ON s.id=b.supplier_id LEFT JOIN booking_arrivals a ON a.booking_id=b.id WHERE b.day=? AND b.status IN ('active','no_show') ORDER BY b.slot,s.name,b.id`).all(day);
       return json(res,200,{bookings:rows.map(row=>({...bookingRow(row),booking_id:row.id,arrival_time:row.arrival_time||null,recorded_at:row.recorded_at||null}))});
+    }
+    if (p === '/api/arrivals/unscheduled') {
+      const user=requireUser(req,res);if(!user)return;
+      if(!['admin','cd'].includes(user.role))return fail(res,403,'Apenas CD e administradores podem registrar veículos fora da agenda.');
+      if(req.method==='GET'){
+        const day=url.searchParams.get('day')||nowParts().day;
+        if(!isValidDay(day))return fail(res,400,'Informe uma data válida.');
+        const rows=db.prepare(`SELECT u.id,u.day,u.supplier_id,s.name AS supplier_name,u.arrival_time,u.created_at
+          FROM unscheduled_arrivals u JOIN suppliers s ON s.id=u.supplier_id
+          WHERE u.day=? ORDER BY u.arrival_time,s.name,u.id`).all(day);
+        return json(res,200,{arrivals:rows});
+      }
+      if(req.method==='POST'){
+        const body=await readBody(req),day=String(body.day||''),arrivalTime=String(body.arrival_time||''),supplierId=Number(body.supplier_id);
+        if(!db.prepare('SELECT id FROM suppliers WHERE id=? AND archived_at IS NULL').get(supplierId))return fail(res,400,'Selecione um fornecedor disponível.');
+        if(!isValidDay(day)||day>nowParts().day)return fail(res,400,'A data de chegada deve ser hoje ou uma data anterior.');
+        if(!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(arrivalTime)||(day===nowParts().day&&arrivalTime>nowParts().time))return fail(res,400,'Informe um horário de chegada que não esteja no futuro.');
+        const id=Number(db.prepare('INSERT INTO unscheduled_arrivals(supplier_id,day,arrival_time,recorded_by) VALUES (?,?,?,?)').run(supplierId,day,arrivalTime,user.id).lastInsertRowid);
+        return json(res,201,{id});
+      }
     }
     const arrivalNoShow=/^\/api\/arrivals\/(\d+)\/no-show$/.exec(p);
     if(req.method==='POST'&&arrivalNoShow){

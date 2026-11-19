@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1f40">
   <title>Portal FLV · Agendamento de entregas</title>
-  <link rel="stylesheet" href="/styles.css?v=21">
+  <link rel="stylesheet" href="/styles.css?v=22">
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -83,6 +83,12 @@
       <div id="delayDetailContent" class="delay-modal-content"></div>
     </div>
   </div>
+  <div id="unscheduledArrivalModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="unscheduledArrivalTitle">
+    <div class="history-window unscheduled-arrival-window">
+      <div class="modal-toolbar"><strong id="unscheduledArrivalTitle">Adicionar veículo fora da agenda</strong><button type="button" id="closeUnscheduledArrival" class="icon-button" aria-label="Fechar">&times;</button></div>
+      <div id="unscheduledArrivalContent"></div>
+    </div>
+  </div>
   <div id="bookingCapacityModal" class="modal-backdrop capacity-backdrop hidden" role="alertdialog" aria-modal="true" aria-labelledby="bookingCapacityTitle" aria-describedby="bookingCapacityMessage">
     <section class="capacity-dialog">
       <div class="capacity-top-row">
@@ -114,6 +120,6 @@
     </section>
   </div>
   <section id="agendaPrint" class="agenda-print" aria-hidden="true"></section>
-  <script type="module" src="/app.js?v=25"></script>
+  <script type="module" src="/app.js?v=26"></script>
 </body>
 </html>

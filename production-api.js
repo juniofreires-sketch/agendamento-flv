@@ -133,6 +133,32 @@ export async function api(path,method='GET',body){
       p_from:from,p_to:to,p_supplier_id:supplierId||null
     });fail(error);return data;
   }
+  if(p==='/api/dashboard/unscheduled-arrivals'&&method==='GET'){
+    const profile=await signedInProfile();
+    if(!profile||profile.status!=='active'||!['admin','commercial','cd'].includes(profile.role))throw new Error('Sem permissão para consultar veículos fora da agenda.');
+    const from=url.searchParams.get('from')||localParts().day,to=url.searchParams.get('to')||localParts().day;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)throw new Error('Período inválido.');
+    const supplierId=Number(url.searchParams.get('supplier_id')||0);
+    if(supplierId&&profile.role!=='admin')throw new Error('Apenas administradores podem filtrar por fornecedor.');
+    const {data,error}=await supabase.rpc('unscheduled_arrival_summary',{p_from:from,p_to:to,p_supplier_id:supplierId||null});
+    fail(error);return data;
+  }
+  if(p==='/api/arrivals/unscheduled'){
+    const profile=await signedInProfile();
+    if(!profile||profile.status!=='active'||!['admin','cd'].includes(profile.role))throw new Error('Apenas CD e administradores podem registrar veículos fora da agenda.');
+    if(method==='GET'){
+      const day=url.searchParams.get('day')||localParts().day;
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(day))throw new Error('Informe uma data válida.');
+      const {data,error}=await supabase.rpc('list_unscheduled_arrivals',{p_day:day});fail(error);
+      return {arrivals:(data||[]).map(row=>({...row,arrival_time:String(row.arrival_time).slice(0,5)}))};
+    }
+    if(method==='POST'){
+      const day=String(body?.day||''),arrivalTime=String(body?.arrival_time||''),supplierId=Number(body?.supplier_id||0);
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!supplierId||!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(arrivalTime))throw new Error('Informe fornecedor, data e horário de chegada válidos.');
+      const {data,error}=await supabase.rpc('record_unscheduled_arrival',{p_supplier_id:supplierId,p_day:day,p_arrival_time:arrivalTime});
+      fail(error);return {id:data};
+    }
+  }
   if(p==='/api/arrivals'&&method==='GET'){
     const profile=await signedInProfile();
     if(!profile||profile.status!=='active'||!['admin','cd'].includes(profile.role))throw new Error('Apenas CD e administradores podem consultar chegadas.');
