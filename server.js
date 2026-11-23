@@ -508,6 +508,49 @@ const server = http.createServer(async (req,res) => {
       return json(res,200,{arrivals:rows});
     }
     const match = /^\/api\/bookings\/(\d+)(?:\/(cancel|no-show))?$/.exec(p);
+    const editSlots = /^\/api\/bookings\/(\d+)\/edit-slots$/.exec(p);
+    if (editSlots && req.method === 'GET') {
+      const user=requireUser(req,res);if(!user)return;
+      const booking=db.prepare('SELECT * FROM bookings WHERE id=?').get(Number(editSlots[1]));
+      const now=nowParts(),day=url.searchParams.get('day')||'';
+      if(user.role!=='supplier'||!booking||booking.supplier_id!==user.supplier_id||booking.status!=='active'||booking.day<now.day)return fail(res,403,'Este agendamento não pode ser editado por este usuário.');
+      if(!isValidDay(day)||isSunday(day)||day<now.day||(day===now.day&&booking.day!==now.day))return fail(res,400,'Escolha uma data disponível para edição.');
+      if(day!==booking.day&&blockedBookingDay(day))return json(res,200,{slots:[],blocked:true});
+      const settings=getSchedulingSettings();
+      if(day!==booking.day&&db.prepare("SELECT COUNT(*) AS n FROM bookings WHERE day=? AND status='active'").get(day).n>=settings.daily_vehicle_limit)return json(res,200,{slots:[],blocked:false});
+      const slots=[...new Set([...slotsFor(settings),...(day===booking.day?[booking.slot]:[])])].sort().filter(slot=>{
+        if(day===now.day&&slot<now.time&&!(day===booking.day&&slot===booking.slot))return false;
+        if(day===booking.day&&slot===booking.slot)return true;
+        return db.prepare("SELECT COUNT(*) AS n FROM bookings WHERE day=? AND slot=? AND status='active' AND id<>?").get(day,slot,booking.id).n<settings.vehicles_per_slot;
+      });
+      return json(res,200,{slots,blocked:false});
+    }
+    if (match && req.method === 'PATCH' && !match[2]) {
+      const user=requireUser(req,res);if(!user)return;
+      if(user.role!=='supplier'||!user.supplier_id)return fail(res,403,'Apenas fornecedores podem editar seus agendamentos.');
+      const body=await readBody(req),day=String(body.day||''),slot=String(body.slot||'').slice(0,5);
+      const weight=Number(body.weight_kg),items=Number(body.item_count),boxes=body.box_count===''||body.box_count==null?0:Number(body.box_count);
+      if(!isValidDay(day)||isSunday(day))return fail(res,400,'Escolha uma data válida de segunda a sábado.');
+      if(!Number.isFinite(weight)||weight<=0||!Number.isInteger(items)||items<0||!Number.isInteger(boxes)||boxes<0)return fail(res,400,'Informe peso positivo e quantidades inteiras maiores ou iguais a zero.');
+      if(!vehicleTypes.includes(body.vehicle_type)||!cargoTypes.includes(body.cargo_type))return fail(res,400,'Selecione o tipo de veículo e o tipo de carga.');
+      const order=String(body.order_number||'').trim(),invoice=String(body.invoice_number||'').trim();
+      if(order.length>80||invoice.length>80)return fail(res,400,'Número do pedido ou nota fiscal muito longo.');
+      db.exec('BEGIN IMMEDIATE');
+      try{
+        const booking=db.prepare('SELECT * FROM bookings WHERE id=?').get(Number(match[1])),now=nowParts();
+        if(!booking||booking.supplier_id!==user.supplier_id){db.exec('ROLLBACK');return fail(res,404,'Agendamento não encontrado.');}
+        if(booking.status!=='active'||booking.day<now.day){db.exec('ROLLBACK');return fail(res,409,'Somente agendamentos confirmados de hoje ou futuros podem ser editados.');}
+        if(day<now.day||(day===now.day&&booking.day!==now.day)){db.exec('ROLLBACK');return fail(res,400,'Não é possível mover um agendamento futuro para hoje ou para uma data anterior.');}
+        if(db.prepare('SELECT 1 FROM booking_arrivals WHERE booking_id=?').get(booking.id)){db.exec('ROLLBACK');return fail(res,409,'A chegada já foi registrada para este agendamento.');}
+        if(day!==booking.day&&blockedBookingDay(day)){db.exec('ROLLBACK');return fail(res,409,'Os agendamentos para esta data estão bloqueados.');}
+        if(!(day===booking.day&&slot===booking.slot)&&!slotsFor(getSchedulingSettings()).includes(slot)||(day===now.day&&slot!==booking.slot&&slot<now.time)){db.exec('ROLLBACK');return fail(res,400,'Selecione um horário válido que ainda não passou.');}
+        const settings=getSchedulingSettings();
+        if(day!==booking.day&&db.prepare("SELECT COUNT(*) AS n FROM bookings WHERE day=? AND status='active'").get(day).n>=settings.daily_vehicle_limit){db.exec('ROLLBACK');return fail(res,409,'O limite de veículos para esta data foi atingido.');}
+        if((day!==booking.day||slot!==booking.slot)&&db.prepare("SELECT COUNT(*) AS n FROM bookings WHERE day=? AND slot=? AND status='active' AND id<>?").get(day,slot,booking.id).n>=settings.vehicles_per_slot){db.exec('ROLLBACK');return fail(res,409,'O horário selecionado acabou de ser preenchido.');}
+        db.prepare('UPDATE bookings SET day=?,slot=?,order_number=?,invoice_number=?,weight_kg=?,item_count=?,box_count=?,vehicle_type=?,cargo_type=? WHERE id=?').run(day,slot,order||null,invoice||null,weight,items,boxes,body.vehicle_type,body.cargo_type,booking.id);
+        db.exec('COMMIT');return sendBooking(res,booking.id,user);
+      }catch(error){db.exec('ROLLBACK');throw error;}
+    }
     if (match && req.method === 'GET' && !match[2]) {
       const user = requireUser(req,res); if (!user) return;
       return sendBooking(res,Number(match[1]),user);

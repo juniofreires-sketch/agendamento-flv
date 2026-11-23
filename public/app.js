@@ -17,7 +17,7 @@ const api = async (url, method='GET', body) => {
   if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a operação.');
   return normalizeSupplierNames(data);
 };
-const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardTab:'general',dashboardSupplierRows:[],dashboardDay:'',dashboardDayPage:0,arrivalDay:'',arrivalTab:'pending',arrivals:[],unscheduledArrivals:[],unscheduledArrivalsError:null,arrivalRequest:0,delayFrom:'',delayTo:'',delaySuppliers:[],delayRequest:0,delayDetailRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],slotBlocked:false,availabilityRequest:0,bookingNoticeAcknowledged:false,bookings:[],pending:[],adminUsers:[],manualSuppliers:[],userSearch:'',userRoleFilter:'',blockedDays:[],editingUser:null,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
+const state = {meta:null,user:null,view:'dashboard',authMode:'login',bookTab:'active',supplierBookTab:'active',supplierBookings:[],dashFrom:'',dashTo:'',dashSupplier:'',dashRequest:0,dashboardTab:'general',dashboardSupplierRows:[],dashboardDay:'',dashboardDayPage:0,arrivalDay:'',arrivalTab:'pending',arrivals:[],unscheduledArrivals:[],unscheduledArrivalsError:null,arrivalRequest:0,delayFrom:'',delayTo:'',delaySuppliers:[],delayRequest:0,delayDetailRequest:0,bookFrom:'',bookTo:'',bookSupplier:'',bookingsRequest:0,slotDay:'',selectedSlot:'',availableSlots:[],slotBlocked:false,availabilityRequest:0,bookingNoticeAcknowledged:false,bookings:[],pending:[],adminUsers:[],manualSuppliers:[],userSearch:'',userRoleFilter:'',blockedDays:[],editingUser:null,editingBooking:null,editDay:'',editSelectedSlot:'',editSlots:[],editAvailabilityRequest:0,historyFrom:'',historyTo:'',historySupplier:'',historyStatus:'',historySearched:false,historyBookings:[],historyRequest:0,pendingNotifications:[],notificationSeen:[],notificationUserId:null};
 let notificationTimer;
 let bookingNoticeReturnFocus=null;
 const notificationStorageKey = id => 'flv-notifications-seen:'+id;
@@ -63,6 +63,7 @@ const shortDate = day => new Intl.DateTimeFormat('pt-BR',{weekday:'long',day:'2-
 const formatNum = n => new Intl.NumberFormat('pt-BR').format(n || 0);
 const formatWeight = n => new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(n || 0);
 const today = () => state.meta?.today || new Date().toISOString().slice(0,10);
+const currentPortalDay = () => new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const dateOffset = (day, n) => {const d=new Date(day+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)};
 const lastOfMonth = day => {const d=new Date(day+'T12:00:00Z');d.setUTCMonth(d.getUTCMonth()+1,0);return d.toISOString().slice(0,10)};
 const nextOpenDay = day => {let x=day;while(new Date(x+'T12:00:00Z').getUTCDay()===0)x=dateOffset(x,1);return x};
@@ -168,7 +169,47 @@ const pageHead=(kicker,title,description,action='')=>'<div class="page-head"><di
 const bookingStatusLabel=status=>status==='active'?'● Confirmado':status==='no_show'?'⚠ No show':'○ Cancelado';
 function bookingTable(rows,actions=true,adminCheck=false){
   if(!rows.length)return '<div class="empty-state"><span class="empty-icon">▤</span><strong>Nenhum agendamento encontrado</strong><span>Altere o período ou crie um novo agendamento.</span></div>';
-  return '<div class="table-wrap"><table class="data-table"><thead><tr><th>Senha</th><th>Data e horário</th><th>Fornecedor</th><th>Carga</th><th>Situação</th><th></th></tr></thead><tbody>'+rows.map(b=>'<tr><td><span class="cell-title">#'+String(b.id).padStart(3,'0')+'</span><span class="cell-sub">'+esc(b.vehicle_type)+'</span></td><td><span class="cell-title">'+dateBR(b.day)+'</span><span class="cell-sub">'+esc(b.slot)+'</span></td><td><span class="cell-title">'+esc(b.supplier_name)+'</span></td><td><span class="cell-title">'+formatWeight(b.weight_kg)+' kg</span><span class="cell-sub">'+formatNum(b.box_count)+' caixas · '+formatNum(b.item_count)+' itens</span></td><td><span class="badge '+b.status+'">'+bookingStatusLabel(b.status)+'</span></td><td><div class="mini-actions"><button type="button" class="btn" data-ticket="'+b.id+'">Senha</button>'+(adminCheck&&b.status==='active'&&b.day<=today()?'<button type="button" class="btn btn-no-show" data-no-show="'+b.id+'" title="Marcar como No show">Check</button>':'')+(actions&&b.status==='active'?'<button type="button" class="btn btn-danger" data-cancel="'+b.id+'">Cancelar</button>':'')+'</div></td></tr>').join('')+'</tbody></table></div>';
+  return '<div class="table-wrap"><table class="data-table"><thead><tr><th>Senha</th><th>Data e horário</th><th>Fornecedor</th><th>Carga</th><th>Situação</th><th></th></tr></thead><tbody>'+rows.map(b=>'<tr><td><span class="cell-title">#'+String(b.id).padStart(3,'0')+'</span><span class="cell-sub">'+esc(b.vehicle_type)+'</span></td><td><span class="cell-title">'+dateBR(b.day)+'</span><span class="cell-sub">'+esc(b.slot)+'</span></td><td><span class="cell-title">'+esc(b.supplier_name)+'</span></td><td><span class="cell-title">'+formatWeight(b.weight_kg)+' kg</span><span class="cell-sub">'+formatNum(b.box_count)+' caixas · '+formatNum(b.item_count)+' itens</span></td><td><span class="badge '+b.status+'">'+bookingStatusLabel(b.status)+'</span></td><td><div class="mini-actions"><button type="button" class="btn" data-ticket="'+b.id+'">Senha</button>'+(adminCheck&&b.status==='active'&&b.day<=today()?'<button type="button" class="btn btn-no-show" data-no-show="'+b.id+'" title="Marcar como No show">Check</button>':'')+(actions&&state.user?.role==='supplier'&&b.status==='active'&&b.day>=currentPortalDay()&&Number(b.supplier_id)===Number(state.user.supplier_id)?'<button type="button" class="btn" data-edit-booking="'+b.id+'">Editar</button>':'')+(actions&&b.status==='active'?'<button type="button" class="btn btn-danger" data-cancel="'+b.id+'">Cancelar</button>':'')+'</div></td></tr>').join('')+'</tbody></table></div>';
+}
+function closeEditBooking(){
+  state.editAvailabilityRequest++;
+  state.editingBooking=null;
+  $('#editBookingModal').classList.add('hidden');
+}
+function renderEditBookingSlots(){
+  const target=$('#editBookingSlots');if(!target)return;
+  target.innerHTML=state.editSlots.length?state.editSlots.map(slot=>'<button type="button" class="booking-slot'+(state.editSelectedSlot===slot?' selected':'')+'" aria-pressed="'+(state.editSelectedSlot===slot)+'" data-edit-booking-slot="'+esc(slot)+'">'+esc(slot)+'</button>').join(''):'<div class="slot-message">Não há horários disponíveis para esta data. Escolha outra data.</div>';
+  $('#editBookingSlot').value=state.editSelectedSlot;
+}
+async function refreshEditBookingSlots(){
+  const booking=state.editingBooking,day=state.editDay,request=++state.editAvailabilityRequest;
+  if(!booking)return;
+  $('#editBookingSlots').innerHTML='<div class="slot-message">Carregando horários disponíveis...</div>';
+  try{
+    const result=await api('/api/bookings/'+booking.id+'/edit-slots?day='+encodeURIComponent(day));
+    if(request!==state.editAvailabilityRequest||!state.editingBooking||day!==state.editDay)return;
+    state.editSlots=result.slots||[];
+    if(!state.editSlots.includes(state.editSelectedSlot))state.editSelectedSlot='';
+    renderEditBookingSlots();
+  }catch(error){if(request===state.editAvailabilityRequest&&state.editingBooking)$('#editBookingSlots').innerHTML='<div class="slot-message error">'+esc(error.message)+'</div>'}
+}
+async function openEditBooking(id){
+  const booking=(await api('/api/bookings/'+id)).booking;
+  if(state.user?.role!=='supplier'||Number(booking.supplier_id)!==Number(state.user.supplier_id)||booking.status!=='active'||booking.day<currentPortalDay())throw new Error('Este agendamento não pode ser editado.');
+  state.editingBooking=booking;state.editDay=booking.day;state.editSelectedSlot=String(booking.slot).slice(0,5);state.editSlots=[];
+  const minimum=booking.day===currentPortalDay()?currentPortalDay():nextOpenDay(dateOffset(currentPortalDay(),1));
+  const options=(values,selected)=>'<option value="">Selecione</option>'+values.map(value=>'<option value="'+esc(value)+'"'+(value===selected?' selected':'')+'>'+esc(value)+'</option>').join('');
+  $('#editBookingTitle').textContent='Editar agendamento #'+String(booking.id).padStart(3,'0');
+  $('#editBookingContent').innerHTML='<form id="editBookingForm" class="history-form"><p>Fornecedor: <strong>'+esc(booking.supplier_name)+'</strong>. Você pode alterar os dados desta entrega, a data e o horário disponível.</p>'+
+    '<div class="field"><label for="editBookingDay">Data da entrega *</label><input id="editBookingDay" name="day" type="date" min="'+minimum+'" value="'+esc(booking.day)+'" required></div>'+
+    '<div class="field"><label>Horário de agendamento *</label><div id="editBookingSlots" class="booking-slot-grid" aria-label="Horários disponíveis"></div><input id="editBookingSlot" name="slot" type="hidden" value="'+esc(state.editSelectedSlot)+'"></div>'+
+    '<div class="field-row"><div class="field"><label for="editOrder">Número do pedido</label><input id="editOrder" name="order_number" maxlength="80" value="'+esc(booking.order_number||'')+'"></div><div class="field"><label for="editInvoice">Nota fiscal</label><input id="editInvoice" name="invoice_number" maxlength="80" value="'+esc(booking.invoice_number||'')+'"></div></div>'+
+    '<div class="field-row"><div class="field"><label for="editWeight">Peso da carga (kg) *</label><input id="editWeight" name="weight_kg" type="number" min="0.01" step="0.01" value="'+esc(booking.weight_kg)+'" required></div><div class="field"><label for="editItems">Quantidade de itens *</label><input id="editItems" name="item_count" type="number" min="0" step="1" value="'+esc(booking.item_count)+'" required></div></div>'+
+    '<div class="field-row"><div class="field"><label for="editBoxes">Quantidade de caixas</label><input id="editBoxes" name="box_count" type="number" min="0" step="1" value="'+esc(booking.box_count)+'"></div><div class="field"><label for="editVehicle">Tipo de veículo *</label><select id="editVehicle" name="vehicle_type" required>'+options(state.meta.vehicleTypes,booking.vehicle_type)+'</select></div></div>'+
+    '<div class="field"><label for="editCargo">Tipo de carga *</label><select id="editCargo" name="cargo_type" required>'+options(state.meta.cargoTypes,booking.cargo_type)+'</select></div>'+
+    '<div class="history-form-actions"><button type="button" class="btn" id="cancelEditBooking">Cancelar</button><button type="submit" class="btn btn-primary">Salvar alterações</button></div></form>';
+  $('#editBookingModal').classList.remove('hidden');
+  refreshEditBookingSlots();
 }
 const weekdayName=day=>new Intl.DateTimeFormat('pt-BR',{weekday:'long'}).format(new Date(day+'T12:00:00Z')).replace(/^./,letter=>letter.toUpperCase());
 let expandedDashboardCard=null;
@@ -775,6 +816,10 @@ document.addEventListener('click',async e=>{
   }
   const ticket=e.target.closest('[data-ticket]');
   if(ticket){try{openTicket((await api('/api/bookings/'+ticket.dataset.ticket)).booking)}catch(err){toast(err.message,true)}return}
+  const editBooking=e.target.closest('[data-edit-booking]');
+  if(editBooking){try{await openEditBooking(editBooking.dataset.editBooking)}catch(error){toast(error.message,true)}return}
+  const editSlot=e.target.closest('[data-edit-booking-slot]');
+  if(editSlot){state.editSelectedSlot=editSlot.dataset.editBookingSlot;renderEditBookingSlots();return}
   const cancel=e.target.closest('[data-cancel]');
   if(cancel){if(!confirm('Cancelar este agendamento? A vaga será liberada.'))return;try{await api('/api/bookings/'+cancel.dataset.cancel+'/cancel','POST',{});toast('Agendamento cancelado.');await renderBookings()}catch(err){toast(err.message,true)}return}
   const markNoShow=e.target.closest('[data-no-show]');
@@ -796,6 +841,7 @@ document.addEventListener('click',async e=>{
   if(e.target.id==='menuBtn'){$('#sidebar').classList.add('open');$('#mobileOverlay').classList.add('show')}
   if(e.target.id==='mobileOverlay'){$('#sidebar').classList.remove('open');$('#mobileOverlay').classList.remove('show')}
   if(e.target.id==='closeTicket'||e.target.id==='ticketModal')$('#ticketModal').classList.add('hidden');
+  if(e.target.id==='closeEditBooking'||e.target.id==='cancelEditBooking'||e.target.id==='editBookingModal')closeEditBooking();
   if(e.target.id==='closeDashboardDay'||e.target.id==='dashboardDayModal')closeDashboardDayModal();
   if(e.target.id==='closeDelayDetail'||e.target.id==='delayDetailModal'){state.delayDetailRequest++;$('#delayDetailModal').classList.add('hidden')}
   if(e.target.id==='closeDelayModal'||e.target.id==='delayModal')closeDelayModal();
@@ -815,7 +861,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshNotifications()});
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){closeDashboardZoom();closeNotifications();closeSupplierCombos();closeHistoryModal();closeUserRoleModal();closeUnscheduledArrivalModal();closeBookingCapacityModal();closeBookingNotice();closeDashboardDayModal();closeDelayModal();return}
+  if(e.key==='Escape'){closeDashboardZoom();closeNotifications();closeSupplierCombos();closeHistoryModal();closeEditBooking();closeUserRoleModal();closeUnscheduledArrivalModal();closeBookingCapacityModal();closeBookingNotice();closeDashboardDayModal();closeDelayModal();return}
   if(e.key==='Enter'&&e.target.matches('[data-combo-search]')){
     const first=e.target.closest('[data-supplier-combo]').querySelector('[data-combo-option]');
     if(first){e.preventDefault();first.click()}
@@ -850,12 +896,20 @@ document.addEventListener('change',e=>{
     state.selectedSlot='';
     refreshAvailableSlots(state.slotDay);
   }
+  if(e.target.id==='editBookingDay'){
+    const booking=state.editingBooking,day=e.target.value;
+    if(!booking||!day)return;
+    const minimum=booking.day===currentPortalDay()?currentPortalDay():nextOpenDay(dateOffset(currentPortalDay(),1));
+    if(day<minimum||isSunday(day)){toast('Escolha uma data disponível de segunda a sábado.',true);e.target.value=state.editDay;return}
+    state.editDay=day;state.editSelectedSlot=day===booking.day?String(booking.slot).slice(0,5):'';
+    refreshEditBookingSlots();return;
+  }
   if(e.target.id==='userRole'||e.target.id==='userRoleSupplierMode')updateUserRoleSupplierVisibility();
   if(e.target.id==='scheduleInterval')updateDailyLimitPreview();
 });
 document.addEventListener('submit',async e=>{
   const form=e.target;
-  if(!form.hasAttribute('data-arrival-form')&&!['bootstrapForm','registerForm','loginForm','bookingForm','blockedDayForm','supplierForm','historyForm','schedulingForm','userRoleForm','unscheduledArrivalForm'].includes(form.id))return;
+  if(!form.hasAttribute('data-arrival-form')&&!['bootstrapForm','registerForm','loginForm','bookingForm','editBookingForm','blockedDayForm','supplierForm','historyForm','schedulingForm','userRoleForm','unscheduledArrivalForm'].includes(form.id))return;
   e.preventDefault();
   if(form.id==='bookingForm'&&state.user?.role==='supplier'&&!state.bookingNoticeAcknowledged){openBookingNotice(form.querySelector('button[type="submit"]'));return}
   if(form.hasAttribute('data-arrival-form')){
@@ -865,6 +919,16 @@ document.addEventListener('submit',async e=>{
   submitButton(form,true);
   const values=Object.fromEntries(new FormData(form));
   try{
+    if(form.id==='editBookingForm'){
+      const booking=state.editingBooking;
+      if(!booking||!state.editSlots.includes(values.slot))throw new Error('Selecione um horário disponível antes de salvar.');
+      values.weight_kg=Number(values.weight_kg);
+      values.item_count=Number(values.item_count);
+      values.box_count=values.box_count===''||values.box_count==null?0:Number(values.box_count);
+      await api('/api/bookings/'+booking.id,'PATCH',values);
+      closeEditBooking();toast('Agendamento atualizado.');
+      if(state.view==='bookings')await refreshBookings();else if(state.view==='dashboard')await refreshSupplierBookings();
+    }
     if(form.hasAttribute('data-arrival-form')){
       await api('/api/arrivals/'+form.dataset.arrivalForm,'POST',{arrival_time:values.arrival_time});
       toast('Horário de chegada registrado.');

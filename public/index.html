@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1f40">
   <title>Portal FLV · Agendamento de entregas</title>
-  <link rel="stylesheet" href="/styles.css?v=27">
+  <link rel="stylesheet" href="/styles.css?v=28">
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -56,6 +56,12 @@
     <div class="history-window">
       <div class="modal-toolbar"><strong>Pesquisar histórico</strong><button type="button" id="closeHistory" class="icon-button" aria-label="Fechar">✕</button></div>
       <div id="historyModalContent"></div>
+    </div>
+  </div>
+  <div id="editBookingModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="editBookingTitle">
+    <div class="history-window booking-edit-window">
+      <div class="modal-toolbar"><strong id="editBookingTitle">Editar agendamento</strong><button type="button" id="closeEditBooking" class="icon-button" aria-label="Fechar">×</button></div>
+      <div id="editBookingContent"></div>
     </div>
   </div>
   <div id="dashboardDayModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="dashboardDayModalTitle">
@@ -120,6 +126,6 @@
     </section>
   </div>
   <section id="agendaPrint" class="agenda-print" aria-hidden="true"></section>
-  <script type="module" src="/app.js?v=36"></script>
+  <script type="module" src="/app.js?v=37"></script>
 </body>
 </html>

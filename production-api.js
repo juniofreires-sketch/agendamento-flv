@@ -273,6 +273,24 @@ export async function api(path,method='GET',body){
     fail(readError);return {booking:bookingRow(data)};
   }
   const id=endpointId(p);
+  const editSlots=/^\/api\/bookings\/(\d+)\/edit-slots$/.exec(p);
+  if(editSlots&&method==='GET'){
+    const day=url.searchParams.get('day')||'';
+    const {data,error}=await supabase.rpc('supplier_booking_edit_slots',{p_booking_id:Number(editSlots[1]),p_day:day});
+    fail(error);return {slots:(data||[]).map(row=>String(row.slot).slice(0,5)),blocked:false};
+  }
+  if(id&&method==='PATCH'){
+    const {error}=await supabase.rpc('supplier_edit_booking',{
+      p_booking_id:id,p_day:body.day,p_slot:body.slot,
+      p_order_number:body.order_number||null,p_invoice_number:body.invoice_number||null,
+      p_weight_kg:Number(body.weight_kg),p_item_count:Number(body.item_count),
+      p_box_count:body.box_count===''||body.box_count==null?0:Number(body.box_count),
+      p_vehicle_type:body.vehicle_type,p_cargo_type:body.cargo_type
+    });
+    fail(error);
+    const {data,error:readError}=await supabase.from('bookings').select(bookingSelect).eq('id',id).single();
+    fail(readError);return {booking:bookingRow(data)};
+  }
   if(id && method==='GET' && !p.endsWith('/cancel')){
     const {data,error}=await supabase.from('bookings').select(bookingSelect).eq('id',id).single();
     fail(error);return {booking:bookingRow(data)};

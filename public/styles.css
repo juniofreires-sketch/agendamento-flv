@@ -96,6 +96,10 @@ h1,h2,h3,.stat-value,.side-brand strong,.ticket-number{font-family:Inter,Arial,s
 .dashboard-history span{font-size:12px;color:#7b8da7;margin-top:4px}
 .inline-filters{box-shadow:none;border:1px solid #e4ebf5;background:#f9fbff;border-radius:12px;margin:0 0 20px}
 .history-window{width:min(100%,560px);background:#fff;border-radius:16px;box-shadow:0 25px 75px rgba(8,22,45,.28);max-height:95vh;overflow:auto}
+.booking-edit-window{width:min(100%,720px)}
+.booking-edit-window .history-form{padding:22px 26px}
+.booking-edit-window .booking-slot-grid{margin:4px 0 7px}
+@media print{#editBookingModal{display:none!important}}
 .history-window .modal-toolbar{border-bottom:1px solid #e5ebf4;padding:16px 22px}
 .history-form{padding:23px}
 .history-form>p{margin:0 0 22px;color:#7086a1;font-size:13px}
