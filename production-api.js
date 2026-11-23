@@ -48,6 +48,16 @@ function endpointId(path){
   const m=/^\/api\/bookings\/(\d+)(?:\/cancel)?$/.exec(path);
   return m ? Number(m[1]) : null;
 }
+async function editableSupplierBooking(id){
+  const profile=await signedInProfile();
+  if(!profile||profile.status!=='active'||profile.role!=='supplier'||!profile.supplier_id)
+    throw new Error('Apenas fornecedores podem editar seus agendamentos.');
+  const {data,error}=await supabase.from('bookings').select('id,day,status,supplier_id').eq('id',id).maybeSingle();
+  fail(error);
+  if(!data||data.supplier_id!==profile.supplier_id||data.status!=='active'||data.day<=localParts().day)
+    throw new Error('Somente agendamentos futuros do seu fornecedor podem ser editados.');
+  return data;
+}
 export async function api(path,method='GET',body){
   const url=new URL(path,location.origin);
   const p=url.pathname;
@@ -275,11 +285,14 @@ export async function api(path,method='GET',body){
   const id=endpointId(p);
   const editSlots=/^\/api\/bookings\/(\d+)\/edit-slots$/.exec(p);
   if(editSlots&&method==='GET'){
+    await editableSupplierBooking(Number(editSlots[1]));
     const day=url.searchParams.get('day')||'';
+    if(day<=localParts().day)throw new Error('Escolha uma data futura disponível para edição.');
     const {data,error}=await supabase.rpc('supplier_booking_edit_slots',{p_booking_id:Number(editSlots[1]),p_day:day});
     fail(error);return {slots:(data||[]).map(row=>String(row.slot).slice(0,5)),blocked:false};
   }
   if(id&&method==='PATCH'){
+    await editableSupplierBooking(id);
     const {error}=await supabase.rpc('supplier_edit_booking',{
       p_booking_id:id,p_day:body.day,p_slot:body.slot,
       p_order_number:body.order_number||null,p_invoice_number:body.invoice_number||null,

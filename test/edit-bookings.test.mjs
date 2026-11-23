@@ -44,13 +44,17 @@ try{
   const todayBooking=await call('POST','/api/bookings',{...data,slot:'07:00'},first);
   assert.equal(todayBooking.status,200);
   process.env.FLV_TEST_NOW='2026-11-24T09:00:00Z';
-  const sameDay=await call('PATCH',`/api/bookings/${todayBooking.data.booking.id}`,{...data,slot:'08:00',weight_kg:175},first);
-  assert.equal(sameDay.status,200);
-  assert.equal(sameDay.data.booking.day,'2026-11-24');
-  assert.equal(sameDay.data.booking.slot,'08:00');
+  assert.equal((await call('GET',`/api/bookings/${todayBooking.data.booking.id}/edit-slots?day=2026-11-24`,undefined,first)).status,403);
+  assert.equal((await call('PATCH',`/api/bookings/${todayBooking.data.booking.id}`,{...data,slot:'08:00',weight_kg:175},first)).status,409);
+  assert.equal((await call('POST',`/api/bookings/${todayBooking.data.booking.id}/cancel`,{},first)).status,409);
+  assert.equal((await call('POST',`/api/bookings/${todayBooking.data.booking.id}/cancel`,{},admin)).status,200);
+  const futureBooking=await call('POST','/api/bookings',{...data,day:'2026-11-27'},first);
+  assert.equal(futureBooking.status,200);
+  assert.equal((await call('POST',`/api/bookings/${futureBooking.data.booking.id}/cancel`,{},first)).status,200);
   process.env.FLV_TEST_NOW='2026-11-26T12:00:00Z';
   assert.equal((await call('PATCH',`/api/bookings/${id}`,{...data,day:'2026-11-27'},first)).status,409);
-  console.log('PASS: edição isolada por fornecedor, datas, bloqueios e agendamento anterior');
+  assert.equal((await call('POST',`/api/bookings/${id}/cancel`,{},first)).status,409);
+  console.log('PASS: fornecedor edita e cancela apenas agendamentos futuros; administrador mantém cancelamento');
 }finally{
   delete process.env.FLV_TEST_NOW;
   server.close();

@@ -169,7 +169,7 @@ const pageHead=(kicker,title,description,action='')=>'<div class="page-head"><di
 const bookingStatusLabel=status=>status==='active'?'● Confirmado':status==='no_show'?'⚠ No show':'○ Cancelado';
 function bookingTable(rows,actions=true,adminCheck=false){
   if(!rows.length)return '<div class="empty-state"><span class="empty-icon">▤</span><strong>Nenhum agendamento encontrado</strong><span>Altere o período ou crie um novo agendamento.</span></div>';
-  return '<div class="table-wrap"><table class="data-table"><thead><tr><th>Senha</th><th>Data e horário</th><th>Fornecedor</th><th>Carga</th><th>Situação</th><th></th></tr></thead><tbody>'+rows.map(b=>'<tr><td><span class="cell-title">#'+String(b.id).padStart(3,'0')+'</span><span class="cell-sub">'+esc(b.vehicle_type)+'</span></td><td><span class="cell-title">'+dateBR(b.day)+'</span><span class="cell-sub">'+esc(b.slot)+'</span></td><td><span class="cell-title">'+esc(b.supplier_name)+'</span></td><td><span class="cell-title">'+formatWeight(b.weight_kg)+' kg</span><span class="cell-sub">'+formatNum(b.box_count)+' caixas · '+formatNum(b.item_count)+' itens</span></td><td><span class="badge '+b.status+'">'+bookingStatusLabel(b.status)+'</span></td><td><div class="mini-actions"><button type="button" class="btn" data-ticket="'+b.id+'">Senha</button>'+(adminCheck&&b.status==='active'&&b.day<=today()?'<button type="button" class="btn btn-no-show" data-no-show="'+b.id+'" title="Marcar como No show">Check</button>':'')+(actions&&state.user?.role==='supplier'&&b.status==='active'&&b.day>=currentPortalDay()&&Number(b.supplier_id)===Number(state.user.supplier_id)?'<button type="button" class="btn" data-edit-booking="'+b.id+'">Editar</button>':'')+(actions&&b.status==='active'?'<button type="button" class="btn btn-danger" data-cancel="'+b.id+'">Cancelar</button>':'')+'</div></td></tr>').join('')+'</tbody></table></div>';
+  return '<div class="table-wrap"><table class="data-table"><thead><tr><th>Senha</th><th>Data e horário</th><th>Fornecedor</th><th>Carga</th><th>Situação</th><th></th></tr></thead><tbody>'+rows.map(b=>'<tr><td><span class="cell-title">#'+String(b.id).padStart(3,'0')+'</span><span class="cell-sub">'+esc(b.vehicle_type)+'</span></td><td><span class="cell-title">'+dateBR(b.day)+'</span><span class="cell-sub">'+esc(b.slot)+'</span></td><td><span class="cell-title">'+esc(b.supplier_name)+'</span></td><td><span class="cell-title">'+formatWeight(b.weight_kg)+' kg</span><span class="cell-sub">'+formatNum(b.box_count)+' caixas · '+formatNum(b.item_count)+' itens</span></td><td><span class="badge '+b.status+'">'+bookingStatusLabel(b.status)+'</span></td><td><div class="mini-actions"><button type="button" class="btn" data-ticket="'+b.id+'">Senha</button>'+(adminCheck&&b.status==='active'&&b.day<=today()?'<button type="button" class="btn btn-no-show" data-no-show="'+b.id+'" title="Marcar como No show">Check</button>':'')+(actions&&state.user?.role==='supplier'&&b.status==='active'&&b.day>currentPortalDay()&&Number(b.supplier_id)===Number(state.user.supplier_id)?'<button type="button" class="btn" data-edit-booking="'+b.id+'">Editar</button>':'')+(actions&&b.status==='active'&&(state.user?.role!=='supplier'||b.day>currentPortalDay())?'<button type="button" class="btn btn-danger" data-cancel="'+b.id+'">Cancelar</button>':'')+'</div></td></tr>').join('')+'</tbody></table></div>';
 }
 function closeEditBooking(){
   state.editAvailabilityRequest++;
@@ -195,9 +195,9 @@ async function refreshEditBookingSlots(){
 }
 async function openEditBooking(id){
   const booking=(await api('/api/bookings/'+id)).booking;
-  if(state.user?.role!=='supplier'||Number(booking.supplier_id)!==Number(state.user.supplier_id)||booking.status!=='active'||booking.day<currentPortalDay())throw new Error('Este agendamento não pode ser editado.');
+  if(state.user?.role!=='supplier'||Number(booking.supplier_id)!==Number(state.user.supplier_id)||booking.status!=='active'||booking.day<=currentPortalDay())throw new Error('Somente seus agendamentos futuros podem ser editados.');
   state.editingBooking=booking;state.editDay=booking.day;state.editSelectedSlot=String(booking.slot).slice(0,5);state.editSlots=[];
-  const minimum=booking.day===currentPortalDay()?currentPortalDay():nextOpenDay(dateOffset(currentPortalDay(),1));
+  const minimum=nextOpenDay(dateOffset(currentPortalDay(),1));
   const options=(values,selected)=>'<option value="">Selecione</option>'+values.map(value=>'<option value="'+esc(value)+'"'+(value===selected?' selected':'')+'>'+esc(value)+'</option>').join('');
   $('#editBookingTitle').textContent='Editar agendamento #'+String(booking.id).padStart(3,'0');
   $('#editBookingContent').innerHTML='<form id="editBookingForm" class="history-form"><p>Fornecedor: <strong>'+esc(booking.supplier_name)+'</strong>. Você pode alterar os dados desta entrega, a data e o horário disponível.</p>'+
@@ -899,7 +899,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='editBookingDay'){
     const booking=state.editingBooking,day=e.target.value;
     if(!booking||!day)return;
-    const minimum=booking.day===currentPortalDay()?currentPortalDay():nextOpenDay(dateOffset(currentPortalDay(),1));
+    const minimum=nextOpenDay(dateOffset(currentPortalDay(),1));
     if(day<minimum||isSunday(day)){toast('Escolha uma data disponível de segunda a sábado.',true);e.target.value=state.editDay;return}
     state.editDay=day;state.editSelectedSlot=day===booking.day?String(booking.slot).slice(0,5):'';
     refreshEditBookingSlots();return;

@@ -513,8 +513,8 @@ const server = http.createServer(async (req,res) => {
       const user=requireUser(req,res);if(!user)return;
       const booking=db.prepare('SELECT * FROM bookings WHERE id=?').get(Number(editSlots[1]));
       const now=nowParts(),day=url.searchParams.get('day')||'';
-      if(user.role!=='supplier'||!booking||booking.supplier_id!==user.supplier_id||booking.status!=='active'||booking.day<now.day)return fail(res,403,'Este agendamento não pode ser editado por este usuário.');
-      if(!isValidDay(day)||isSunday(day)||day<now.day||(day===now.day&&booking.day!==now.day))return fail(res,400,'Escolha uma data disponível para edição.');
+      if(user.role!=='supplier'||!booking||booking.supplier_id!==user.supplier_id||booking.status!=='active'||booking.day<=now.day)return fail(res,403,'Somente agendamentos futuros do seu fornecedor podem ser editados.');
+      if(!isValidDay(day)||isSunday(day)||day<=now.day)return fail(res,400,'Escolha uma data futura disponível para edição.');
       if(day!==booking.day&&blockedBookingDay(day))return json(res,200,{slots:[],blocked:true});
       const settings=getSchedulingSettings();
       if(day!==booking.day&&db.prepare("SELECT COUNT(*) AS n FROM bookings WHERE day=? AND status='active'").get(day).n>=settings.daily_vehicle_limit)return json(res,200,{slots:[],blocked:false});
@@ -539,8 +539,8 @@ const server = http.createServer(async (req,res) => {
       try{
         const booking=db.prepare('SELECT * FROM bookings WHERE id=?').get(Number(match[1])),now=nowParts();
         if(!booking||booking.supplier_id!==user.supplier_id){db.exec('ROLLBACK');return fail(res,404,'Agendamento não encontrado.');}
-        if(booking.status!=='active'||booking.day<now.day){db.exec('ROLLBACK');return fail(res,409,'Somente agendamentos confirmados de hoje ou futuros podem ser editados.');}
-        if(day<now.day||(day===now.day&&booking.day!==now.day)){db.exec('ROLLBACK');return fail(res,400,'Não é possível mover um agendamento futuro para hoje ou para uma data anterior.');}
+        if(booking.status!=='active'||booking.day<=now.day){db.exec('ROLLBACK');return fail(res,409,'Somente agendamentos confirmados futuros podem ser editados.');}
+        if(day<=now.day){db.exec('ROLLBACK');return fail(res,400,'Não é possível mover um agendamento para hoje ou para uma data anterior.');}
         if(db.prepare('SELECT 1 FROM booking_arrivals WHERE booking_id=?').get(booking.id)){db.exec('ROLLBACK');return fail(res,409,'A chegada já foi registrada para este agendamento.');}
         if(day!==booking.day&&blockedBookingDay(day)){db.exec('ROLLBACK');return fail(res,409,'Os agendamentos para esta data estão bloqueados.');}
         if(!(day===booking.day&&slot===booking.slot)&&!slotsFor(getSchedulingSettings()).includes(slot)||(day===now.day&&slot!==booking.slot&&slot<now.time)){db.exec('ROLLBACK');return fail(res,400,'Selecione um horário válido que ainda não passou.');}
@@ -560,6 +560,7 @@ const server = http.createServer(async (req,res) => {
       const b = db.prepare('SELECT * FROM bookings WHERE id=?').get(Number(match[1]));
       if (!b || (user.role !== 'admin' && b.supplier_id !== user.supplier_id)) return fail(res,404,'Agendamento não encontrado.');
       if (b.status !== 'active') return fail(res,409,'Somente agendamentos confirmados podem ser cancelados.');
+      if (user.role === 'supplier' && b.day <= nowParts().day) return fail(res,409,'Somente agendamentos futuros podem ser cancelados pelo fornecedor.');
       db.prepare("UPDATE bookings SET status='cancelled',cancelled_at=CURRENT_TIMESTAMP WHERE id=?").run(b.id);
       return sendBooking(res,b.id,user);
     }
