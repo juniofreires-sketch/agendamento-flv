@@ -64,10 +64,14 @@ db.exec(`CREATE TABLE IF NOT EXISTS unscheduled_arrivals (
   supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
   day TEXT NOT NULL,
   arrival_time TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'recorded' CHECK(status IN ('recorded','pending')),
   recorded_by TEXT REFERENCES users(id) ON DELETE SET NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS unscheduled_arrivals_day_idx ON unscheduled_arrivals(day,supplier_id);`);
+if (!db.prepare('PRAGMA table_info(unscheduled_arrivals)').all().some(column=>column.name==='status')) {
+  db.exec("ALTER TABLE unscheduled_arrivals ADD COLUMN status TEXT NOT NULL DEFAULT 'recorded' CHECK(status IN ('recorded','pending'))");
+}
 
 const cleanSupplierName = name => String(name).trim().replace(/^[0-9][0-9./-]*\s+/, '').replace(/\s+/g, ' ');
 const seed = [...new Set(JSON.parse(fs.readFileSync(path.join(root, 'suppliers.json'), 'utf8')).map(cleanSupplierName))];
@@ -390,11 +394,11 @@ const server = http.createServer(async (req,res) => {
       if(supplierId&&user.role!=='admin')return fail(res,403,'Apenas administradores podem filtrar por fornecedor.');
       const throughDay=to<nowParts().day?to:nowParts().day;
       const scheduled=db.prepare("SELECT COUNT(*) AS n FROM bookings WHERE status IN ('active','no_show') AND day BETWEEN ? AND ? AND (?=0 OR supplier_id=?)").get(from,throughDay,supplierId,supplierId).n;
-      const unscheduled=db.prepare('SELECT COUNT(*) AS n FROM unscheduled_arrivals WHERE day BETWEEN ? AND ? AND (?=0 OR supplier_id=?)').get(from,throughDay,supplierId,supplierId).n;
+      const unscheduled=db.prepare("SELECT COUNT(*) AS n FROM unscheduled_arrivals WHERE status='recorded' AND day BETWEEN ? AND ? AND (?=0 OR supplier_id=?)").get(from,throughDay,supplierId,supplierId).n;
       const top=db.prepare(`SELECT u.supplier_id,s.name AS supplier_name,COUNT(*) AS unscheduled,
         (SELECT COUNT(*) FROM bookings b WHERE b.supplier_id=u.supplier_id AND b.status IN ('active','no_show') AND b.day BETWEEN ? AND ?) AS scheduled
         FROM unscheduled_arrivals u JOIN suppliers s ON s.id=u.supplier_id
-        WHERE u.day BETWEEN ? AND ? AND (?=0 OR u.supplier_id=?)
+        WHERE u.status='recorded' AND u.day BETWEEN ? AND ? AND (?=0 OR u.supplier_id=?)
         GROUP BY u.supplier_id,s.name ORDER BY unscheduled DESC,s.name LIMIT 10`).all(from,throughDay,from,throughDay,supplierId,supplierId);
       return json(res,200,{scheduled,unscheduled,unscheduled_percent:scheduled+unscheduled?Math.round(unscheduled*1000/(scheduled+unscheduled))/10:0,
         top_suppliers:top.map(row=>({...row,percent:Math.round(row.unscheduled*1000/(row.scheduled+row.unscheduled))/10}))});
@@ -413,7 +417,7 @@ const server = http.createServer(async (req,res) => {
       if(req.method==='GET'){
         const day=url.searchParams.get('day')||nowParts().day;
         if(!isValidDay(day))return fail(res,400,'Informe uma data válida.');
-        const rows=db.prepare(`SELECT u.id,u.day,u.supplier_id,s.name AS supplier_name,u.arrival_time,u.created_at
+        const rows=db.prepare(`SELECT u.id,u.day,u.supplier_id,s.name AS supplier_name,u.arrival_time,u.status,u.created_at
           FROM unscheduled_arrivals u JOIN suppliers s ON s.id=u.supplier_id
           WHERE u.day=? ORDER BY u.arrival_time,s.name,u.id`).all(day);
         return json(res,200,{arrivals:rows});
@@ -427,7 +431,38 @@ const server = http.createServer(async (req,res) => {
         return json(res,201,{id});
       }
     }
+    const unscheduledAction=/^\/api\/arrivals\/unscheduled\/(\d+)\/(undo|rerecord)$/.exec(p);
+    if(req.method==='POST'&&unscheduledAction){
+      const user=requireUser(req,res);if(!user)return;
+      if(!['admin','cd'].includes(user.role))return fail(res,403,'Apenas CD e administradores podem estornar chegadas.');
+      const id=Number(unscheduledAction[1]);
+      const row=db.prepare('SELECT day,status FROM unscheduled_arrivals WHERE id=?').get(id);
+      if(!row)return fail(res,404,'Registro fora da agenda não encontrado.');
+      if(unscheduledAction[2]==='undo'){
+        if(row.status!=='recorded')return fail(res,409,'Este registro já está aguardando correção.');
+        db.prepare("UPDATE unscheduled_arrivals SET status='pending' WHERE id=? AND status='recorded'").run(id);
+        return json(res,200,{ok:true});
+      }
+      if(row.status!=='pending')return fail(res,409,'Somente registros estornados podem ser refeitos.');
+      const body=await readBody(req),supplierId=Number(body.supplier_id),arrivalTime=String(body.arrival_time||'');
+      if(!db.prepare('SELECT id FROM suppliers WHERE id=? AND archived_at IS NULL').get(supplierId))return fail(res,400,'Selecione um fornecedor disponível.');
+      if(row.day>nowParts().day||!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(arrivalTime)||(row.day===nowParts().day&&arrivalTime>nowParts().time))return fail(res,400,'Informe um horário de chegada que não esteja no futuro.');
+      db.prepare("UPDATE unscheduled_arrivals SET supplier_id=?,arrival_time=?,status='recorded',recorded_by=? WHERE id=? AND status='pending'").run(supplierId,arrivalTime,user.id,id);
+      return json(res,200,{ok:true});
+    }
     const arrivalNoShow=/^\/api\/arrivals\/(\d+)\/no-show$/.exec(p);
+    const undoNoShow=/^\/api\/arrivals\/(\d+)\/undo-no-show$/.exec(p);
+    if(req.method==='POST'&&undoNoShow){
+      const user=requireUser(req,res);if(!user)return;
+      if(!['admin','cd'].includes(user.role))return fail(res,403,'Apenas CD e administradores podem estornar No show.');
+      const id=Number(undoNoShow[1]);
+      const booking=db.prepare('SELECT status FROM bookings WHERE id=?').get(id);
+      if(!booking)return fail(res,404,'Agendamento não encontrado.');
+      if(booking.status!=='no_show')return fail(res,409,'Somente registros No show podem ser estornados.');
+      if(db.prepare('SELECT 1 FROM booking_arrivals WHERE booking_id=?').get(id))return fail(res,409,'Este fornecedor já possui horário de chegada registrado.');
+      db.prepare("UPDATE bookings SET status='active',no_show_at=NULL WHERE id=? AND status='no_show'").run(id);
+      return json(res,200,{ok:true});
+    }
     if(req.method==='POST'&&arrivalNoShow){
       const user=requireUser(req,res);if(!user)return;
       if(!['admin','cd'].includes(user.role))return fail(res,403,'Apenas CD e administradores podem marcar No show.');

@@ -159,6 +159,20 @@ export async function api(path,method='GET',body){
       fail(error);return {id:data};
     }
   }
+  const unscheduledAction=/^\/api\/arrivals\/unscheduled\/(\d+)\/(undo|rerecord)$/.exec(p);
+  if(unscheduledAction&&method==='POST'){
+    const profile=await signedInProfile();
+    if(!profile||profile.status!=='active'||!['admin','cd'].includes(profile.role))throw new Error('Apenas CD e administradores podem estornar chegadas.');
+    const id=Number(unscheduledAction[1]);
+    if(unscheduledAction[2]==='undo'){
+      const {error}=await supabase.rpc('undo_unscheduled_arrival',{p_id:id});fail(error);
+    }else{
+      const supplierId=Number(body?.supplier_id||0),arrivalTime=String(body?.arrival_time||'');
+      if(!supplierId||!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(arrivalTime))throw new Error('Informe fornecedor e horário de chegada válidos.');
+      const {error}=await supabase.rpc('rerecord_unscheduled_arrival',{p_id:id,p_supplier_id:supplierId,p_arrival_time:arrivalTime});fail(error);
+    }
+    return {ok:true};
+  }
   if(p==='/api/arrivals'&&method==='GET'){
     const profile=await signedInProfile();
     if(!profile||profile.status!=='active'||!['admin','cd'].includes(profile.role))throw new Error('Apenas CD e administradores podem consultar chegadas.');
@@ -168,6 +182,13 @@ export async function api(path,method='GET',body){
     return {bookings:(data||[]).map(row=>({...row,slot:String(row.slot).slice(0,5),arrival_time:row.arrival_time?String(row.arrival_time).slice(0,5):null}))};
   }
   const arrivalNoShow=/^\/api\/arrivals\/(\d+)\/no-show$/.exec(p);
+  const undoNoShow=/^\/api\/arrivals\/(\d+)\/undo-no-show$/.exec(p);
+  if(undoNoShow&&method==='POST'){
+    const profile=await signedInProfile();
+    if(!profile||profile.status!=='active'||!['admin','cd'].includes(profile.role))throw new Error('Apenas CD e administradores podem estornar No show.');
+    const {error}=await supabase.rpc('undo_cd_booking_no_show',{p_booking_id:Number(undoNoShow[1])});fail(error);
+    return {ok:true};
+  }
   if(arrivalNoShow&&method==='POST'){
     const profile=await signedInProfile();
     if(!profile||profile.status!=='active'||!['admin','cd'].includes(profile.role))throw new Error('Apenas CD e administradores podem marcar No show.');
