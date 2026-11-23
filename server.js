@@ -604,10 +604,11 @@ const server = http.createServer(async (req,res) => {
       return json(res,200,{ok:true});
     }
     if (req.method === 'POST' && /^\/api\/admin\/users\/[a-f0-9]+\/delete$/.test(p)) {
-      if (!requireUser(req,res,true)) return;
+      const admin=requireUser(req,res,true);if(!admin)return;
       const id=p.split('/')[4];
-      const target=db.prepare("SELECT id FROM users WHERE id=? AND role='supplier'").get(id);
-      if (!target) return fail(res,404,'Usuário fornecedor não encontrado.');
+      if(id===admin.id)return fail(res,403,'Não é possível excluir a própria conta.');
+      const target=db.prepare("SELECT id FROM users WHERE id=? AND role IN ('supplier','commercial','cd')").get(id);
+      if (!target) return fail(res,404,'Usuário elegível para exclusão não encontrado.');
       db.exec('BEGIN IMMEDIATE');
       try {
         db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);

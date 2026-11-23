@@ -61,6 +61,15 @@ for(let i=0;i<meta.data.scheduling.daily_vehicle_limit-(meta.data.scheduling.veh
 }
 assert.equal((await call('POST','/api/bookings',booking,bCookie)).status,409);
 assert.equal((await call('POST','/api/admin/users/'+allUsers.data.users.find(u=>u.email==='a@local.test').id+'/delete',{},adminCookie)).status,200);
+const bUser=allUsers.data.users.find(u=>u.email==='b@local.test');
+assert.equal((await call('POST','/api/admin/users/'+bUser.id+'/role',{role:'cd'},adminCookie)).status,200);
+assert.equal((await call('POST','/api/admin/users/'+bUser.id+'/delete',{},bCookie)).status,403);
+assert.equal((await call('POST','/api/admin/users/'+bUser.id+'/delete',{},adminCookie)).status,200);
+assert.equal((await call('GET','/api/dashboard',undefined,bCookie)).status,401);
+const novaUser=allUsers.data.users.find(u=>u.email==='nova@local.test');
+assert.equal((await call('POST','/api/admin/users/'+novaUser.id+'/role',{role:'commercial'},adminCookie)).status,200);
+assert.equal((await call('POST','/api/admin/users/'+novaUser.id+'/delete',{},adminCookie)).status,200);
+assert.equal((await call('POST','/api/admin/users/'+admin.data.user.id+'/delete',{},adminCookie)).status,403);
 assert.equal((await call('GET','/api/bookings?from='+day+'&to='+day,undefined,adminCookie)).data.bookings.length,meta.data.scheduling.daily_vehicle_limit+1);
 console.log('PASS: importação, autenticação, aprovação, isolamento, capacidade, cancelamento e domingo');
 server.close();

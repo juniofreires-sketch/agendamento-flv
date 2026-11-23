@@ -539,7 +539,7 @@ function closeHistoryModal(){$('#historyModal').classList.add('hidden')}
 async function renderUsers(){
   $('#viewContent').innerHTML=pageHead('GESTÃO DE ACESSOS','Usuários','Avalie solicitações e gerencie os acessos do portal.')+
   '<div class="card section-card"><div class="section-head"><div><h3>Aguardando aprovação</h3><p>Escolha se cada conta terá acesso de Administrador, Fornecedor, Comercial ou CD.</p></div></div><div id="pendingBody" class="empty-state">Carregando...</div></div>'+
-  '<div class="card section-card users-card"><div class="section-head"><div><h3>Usuários do portal</h3><p>Altere o perfil de contas ativas. A exclusão de fornecedores mantém o histórico das entregas.</p></div></div>'+
+  '<div class="card section-card users-card"><div class="section-head"><div><h3>Usuários do portal</h3><p>Altere o perfil de contas ativas. A exclusão de usuários mantém o histórico das entregas.</p></div></div>'+
   '<div class="user-filters"><label class="user-search"><span class="sr-only">Pesquisar por nome, fornecedor ou perfil</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg><input id="userSearch" type="search" autocomplete="off" placeholder="Pesquisar nome, fornecedor ou perfil" value="'+esc(state.userSearch)+'"></label><label class="user-role-filter"><span>Perfil</span><select id="userRoleFilter"><option value="">Todos os perfis</option><option value="admin"'+(state.userRoleFilter==='admin'?' selected':'')+'>Administrador</option><option value="supplier"'+(state.userRoleFilter==='supplier'?' selected':'')+'>Fornecedor</option><option value="commercial"'+(state.userRoleFilter==='commercial'?' selected':'')+'>Comercial</option><option value="cd"'+(state.userRoleFilter==='cd'?' selected':'')+'>CD</option></select></label><span id="userSearchCount" class="user-search-count" aria-live="polite"></span></div>'+
   '<div id="adminUsersBody" class="empty-state">Carregando...</div></div>';
   await Promise.all([refreshPending(),refreshAdminUsers()]);
@@ -571,7 +571,7 @@ function renderAdminUserRows(){
   });
   $('#userSearchCount').textContent=formatNum(rows.length)+' de '+formatNum(state.adminUsers.length)+' usuários';
   target.className='';
-  target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item user-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name||'Sem fornecedor vinculado')+'</small></div><div class="user-actions"><span class="badge '+(u.role==='admin'?'role-admin':u.role==='commercial'?'role-commercial':u.role==='cd'?'role-cd':'role-supplier')+'">'+esc(roleNames[u.role]||u.role)+'</span><span class="badge '+(u.status==='active'?'active':'cancelled')+'">'+(u.status==='active'?'Ativo':'Pendente')+'</span>'+(u.status==='active'&&u.id!==state.user.id?'<button class="btn" type="button" data-edit-user="'+esc(u.id)+'">Alterar perfil</button>':'')+(u.role==='supplier'?'<button class="btn btn-danger" type="button" data-delete-user="'+esc(u.id)+'">Excluir</button>':'')+'</div></div>').join(''):'<div class="empty-state"><strong>'+(state.adminUsers.length?'Nenhum usuário encontrado para este filtro.':'Nenhum usuário cadastrado')+'</strong></div>';
+  target.innerHTML=rows.length?rows.map(u=>'<div class="pending-item user-item"><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.email)+' · '+esc(u.supplier_name||'Sem fornecedor vinculado')+'</small></div><div class="user-actions"><span class="badge '+(u.role==='admin'?'role-admin':u.role==='commercial'?'role-commercial':u.role==='cd'?'role-cd':'role-supplier')+'">'+esc(roleNames[u.role]||u.role)+'</span><span class="badge '+(u.status==='active'?'active':'cancelled')+'">'+(u.status==='active'?'Ativo':'Pendente')+'</span>'+(u.status==='active'&&u.id!==state.user.id?'<button class="btn" type="button" data-edit-user="'+esc(u.id)+'">Alterar perfil</button>':'')+(['supplier','commercial','cd'].includes(u.role)?'<button class="btn btn-danger" type="button" data-delete-user="'+esc(u.id)+'">Excluir</button>':'')+'</div></div>').join(''):'<div class="empty-state"><strong>'+(state.adminUsers.length?'Nenhum usuário encontrado para este filtro.':'Nenhum usuário cadastrado')+'</strong></div>';
 }
 function openUserRoleModal(id){
   const user=state.adminUsers.find(row=>String(row.id)===String(id));
@@ -707,7 +707,8 @@ document.addEventListener('click',async e=>{
   if(supplierBookTab){state.supplierBookTab=supplierBookTab.dataset.supplierBooktab;showSupplierBookings();return}
   const deleteUser=e.target.closest('[data-delete-user]');
   if(deleteUser){
-    if(!confirm('Excluir esta conta de fornecedor? O histórico de agendamentos será mantido.'))return;
+    const target=state.adminUsers.find(user=>String(user.id)===deleteUser.dataset.deleteUser);
+    if(!target||!confirm('Excluir a conta de '+target.name+' ('+(roleNames[target.role]||target.role)+')? O histórico de agendamentos será mantido.'))return;
     try{
       await api('/api/admin/users/'+deleteUser.dataset.deleteUser+'/delete','POST',{});
       toast('Usuário excluído.');
