@@ -159,18 +159,11 @@ export async function api(path,method='GET',body){
       fail(error);return {id:data};
     }
   }
-  const unscheduledAction=/^\/api\/arrivals\/unscheduled\/(\d+)\/(undo|rerecord)$/.exec(p);
-  if(unscheduledAction&&method==='POST'){
+  const deleteUnscheduled=/^\/api\/arrivals\/unscheduled\/(\d+)$/.exec(p);
+  if(deleteUnscheduled&&method==='DELETE'){
     const profile=await signedInProfile();
-    if(!profile||profile.status!=='active'||!['admin','cd'].includes(profile.role))throw new Error('Apenas CD e administradores podem estornar chegadas.');
-    const id=Number(unscheduledAction[1]);
-    if(unscheduledAction[2]==='undo'){
-      const {error}=await supabase.rpc('undo_unscheduled_arrival',{p_id:id});fail(error);
-    }else{
-      const supplierId=Number(body?.supplier_id||0),arrivalTime=String(body?.arrival_time||'');
-      if(!supplierId||!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(arrivalTime))throw new Error('Informe fornecedor e horário de chegada válidos.');
-      const {error}=await supabase.rpc('rerecord_unscheduled_arrival',{p_id:id,p_supplier_id:supplierId,p_arrival_time:arrivalTime});fail(error);
-    }
+    if(!profile||profile.status!=='active'||!['admin','cd'].includes(profile.role))throw new Error('Apenas CD e administradores podem excluir veículos fora da agenda.');
+    const {error}=await supabase.rpc('delete_unscheduled_arrival',{p_id:Number(deleteUnscheduled[1])});fail(error);
     return {ok:true};
   }
   if(p==='/api/arrivals'&&method==='GET'){

@@ -431,23 +431,13 @@ const server = http.createServer(async (req,res) => {
         return json(res,201,{id});
       }
     }
-    const unscheduledAction=/^\/api\/arrivals\/unscheduled\/(\d+)\/(undo|rerecord)$/.exec(p);
-    if(req.method==='POST'&&unscheduledAction){
+    const deleteUnscheduled=/^\/api\/arrivals\/unscheduled\/(\d+)$/.exec(p);
+    if(req.method==='DELETE'&&deleteUnscheduled){
       const user=requireUser(req,res);if(!user)return;
-      if(!['admin','cd'].includes(user.role))return fail(res,403,'Apenas CD e administradores podem estornar chegadas.');
-      const id=Number(unscheduledAction[1]);
-      const row=db.prepare('SELECT day,status FROM unscheduled_arrivals WHERE id=?').get(id);
-      if(!row)return fail(res,404,'Registro fora da agenda não encontrado.');
-      if(unscheduledAction[2]==='undo'){
-        if(row.status!=='recorded')return fail(res,409,'Este registro já está aguardando correção.');
-        db.prepare("UPDATE unscheduled_arrivals SET status='pending' WHERE id=? AND status='recorded'").run(id);
-        return json(res,200,{ok:true});
-      }
-      if(row.status!=='pending')return fail(res,409,'Somente registros estornados podem ser refeitos.');
-      const body=await readBody(req),supplierId=Number(body.supplier_id),arrivalTime=String(body.arrival_time||'');
-      if(!db.prepare('SELECT id FROM suppliers WHERE id=? AND archived_at IS NULL').get(supplierId))return fail(res,400,'Selecione um fornecedor disponível.');
-      if(row.day>nowParts().day||!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(arrivalTime)||(row.day===nowParts().day&&arrivalTime>nowParts().time))return fail(res,400,'Informe um horário de chegada que não esteja no futuro.');
-      db.prepare("UPDATE unscheduled_arrivals SET supplier_id=?,arrival_time=?,status='recorded',recorded_by=? WHERE id=? AND status='pending'").run(supplierId,arrivalTime,user.id,id);
+      if(!['admin','cd'].includes(user.role))return fail(res,403,'Apenas CD e administradores podem excluir veículos fora da agenda.');
+      const id=Number(deleteUnscheduled[1]);
+      const result=db.prepare('DELETE FROM unscheduled_arrivals WHERE id=?').run(id);
+      if(!result.changes)return fail(res,404,'Registro fora da agenda não encontrado.');
       return json(res,200,{ok:true});
     }
     const arrivalNoShow=/^\/api\/arrivals\/(\d+)\/no-show$/.exec(p);

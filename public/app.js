@@ -352,16 +352,15 @@ function renderArrivalTab(){
   const pending=state.arrivals.filter(row=>row.status==='active'&&!row.arrival_time);
   const recorded=state.arrivals.filter(row=>row.status==='active'&&row.arrival_time);
   const noShow=state.arrivals.filter(row=>row.status==='no_show');
-  const manualPending=state.unscheduledArrivals.filter(row=>row.status==='pending');
   const manualRecorded=state.unscheduledArrivals.filter(row=>row.status!=='pending');
-  $('#arrivalPendingCount').textContent='('+formatNum(pending.length+manualPending.length)+')';
+  $('#arrivalPendingCount').textContent='('+formatNum(pending.length)+')';
   $('#arrivalRecordedCount').textContent='('+formatNum(recorded.length)+')';
   $('#arrivalNoShowCount').textContent='('+formatNum(noShow.length)+')';
   $('#arrivalUnscheduledCount').textContent='('+formatNum(manualRecorded.length)+')';
   document.querySelectorAll('[data-arrival-tab]').forEach(button=>button.classList.toggle('active',button.dataset.arrivalTab===state.arrivalTab));
   if(state.arrivalTab==='unscheduled'){
     if(state.unscheduledArrivalsError){$('#arrivalBody').innerHTML='<div class="empty-state">'+esc(state.unscheduledArrivalsError)+'</div>';return}
-    $('#arrivalBody').innerHTML=manualRecorded.length?'<div class="table-wrap"><table class="data-table unscheduled-list-table"><thead><tr><th>Fornecedor</th><th>Data da chegada</th><th>Horário de chegada</th><th>Situação</th><th>Ação</th></tr></thead><tbody>'+manualRecorded.map(row=>'<tr><td><strong>'+esc(row.supplier_name)+'</strong></td><td>'+dateBR(row.day)+'</td><td>'+esc(String(row.arrival_time).slice(0,5))+'</td><td><span class="badge no_show">Fora da agenda</span></td><td><button type="button" class="btn btn-danger" data-unscheduled-undo="'+Number(row.id)+'">Estornar</button></td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state"><strong>Nenhum veículo fora da agenda nesta data.</strong></div>';
+    $('#arrivalBody').innerHTML=manualRecorded.length?'<div class="table-wrap"><table class="data-table unscheduled-list-table"><thead><tr><th>Fornecedor</th><th>Data da chegada</th><th>Horário de chegada</th><th>Situação</th><th>Ação</th></tr></thead><tbody>'+manualRecorded.map(row=>'<tr><td><strong>'+esc(row.supplier_name)+'</strong></td><td>'+dateBR(row.day)+'</td><td>'+esc(String(row.arrival_time).slice(0,5))+'</td><td><span class="badge no_show">Fora da agenda</span></td><td><button type="button" class="btn btn-danger" data-unscheduled-delete="'+Number(row.id)+'">Excluir</button></td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state"><strong>Nenhum veículo fora da agenda nesta data.</strong></div>';
     return;
   }
   const rows=state.arrivalTab==='pending'?pending:state.arrivalTab==='recorded'?recorded:noShow;
@@ -377,17 +376,13 @@ function renderArrivalTab(){
       (delay===null?'':'<small class="arrival-indicator '+(delay>0?'late':'on-time')+'">'+(delay>0?'Atraso de '+durationLabel(delay):'No horário')+'</small>');
     return '<tr><td><span class="cell-title">#'+String(id).padStart(3,'0')+'</span><span class="cell-sub">'+esc(slot)+'</span></td><td><span class="cell-title">'+esc(row.supplier_name)+'</span></td><td>'+esc(row.order_number||'—')+'<span class="cell-sub">NF: '+esc(row.invoice_number||'—')+'</span></td><td><span class="cell-title">'+formatWeight(row.weight_kg)+' kg</span><span class="cell-sub">'+formatNum(row.box_count)+' caixas · '+formatNum(row.item_count)+' itens</span></td><td>'+esc(row.vehicle_type)+'<span class="cell-sub">'+esc(row.cargo_type)+'</span></td><td>'+arrivalControl+'</td></tr>';
   }).join('')+'</tbody></table></div>':'';
-  if(state.arrivalTab==='pending'&&manualPending.length){
-    html+='<div class="table-wrap"><table class="data-table unscheduled-list-table"><thead><tr><th>Fornecedor</th><th>Data da chegada</th><th>Situação</th><th>Ação</th></tr></thead><tbody>'+manualPending.map(row=>'<tr><td><strong>'+esc(row.supplier_name)+'</strong></td><td>'+dateBR(row.day)+'</td><td><span class="badge">Fora da agenda · estornado</span></td><td><button type="button" class="btn btn-primary" data-unscheduled-redo="'+Number(row.id)+'">Refazer chegada</button></td></tr>').join('')+'</tbody></table></div>';
-  }
   $('#arrivalBody').innerHTML=html||'<div class="empty-state"><strong>'+emptyMessage[state.arrivalTab]+'</strong></div>';
 }
-async function openUnscheduledArrivalModal(row=null){
+async function openUnscheduledArrivalModal(){
   if(!['admin','cd'].includes(state.user?.role))return;
   state.meta.suppliers=(await api('/api/meta')).suppliers;
   const day=currentLocalDay();
-  $('#unscheduledArrivalContent').innerHTML='<form id="unscheduledArrivalForm" class="unscheduled-arrival-form" data-edit-id="'+(row?Number(row.id):'')+'"><p class="subtext">'+(row?'Corrija o fornecedor e informe novamente o horário de chegada.':'Registre um veículo por vez. Como não há horário agendado, este lançamento não entra no cálculo de atrasos.')+'</p>'+supplierCombo('unscheduledSupplier')+'<div class="field"><label for="unscheduledDay">Data da chegada *</label><input id="unscheduledDay" type="date" name="day" value="'+esc(row?.day||day)+'" max="'+day+'" required'+(row?' readonly':'')+'></div><div class="field"><label for="unscheduledTime">Horário de chegada *</label><input id="unscheduledTime" type="time" name="arrival_time" required></div><div class="history-form-actions"><button type="button" class="btn" id="cancelUnscheduledArrival">Cancelar</button><button type="submit" class="btn btn-primary">'+(row?'Registrar novamente':'Registrar veículo')+'</button></div></form>';
-  if(row){$('#unscheduledSupplierValue').value=row.supplier_id;$('#unscheduledSupplierTrigger [data-combo-label]').textContent=row.supplier_name;}
+  $('#unscheduledArrivalContent').innerHTML='<form id="unscheduledArrivalForm" class="unscheduled-arrival-form"><p class="subtext">Registre um veículo por vez. Como não há horário agendado, este lançamento não entra no cálculo de atrasos.</p>'+supplierCombo('unscheduledSupplier')+'<div class="field"><label for="unscheduledDay">Data da chegada *</label><input id="unscheduledDay" type="date" name="day" value="'+day+'" max="'+day+'" required></div><div class="field"><label for="unscheduledTime">Horário de chegada *</label><input id="unscheduledTime" type="time" name="arrival_time" required></div><div class="history-form-actions"><button type="button" class="btn" id="cancelUnscheduledArrival">Cancelar</button><button type="submit" class="btn btn-primary">Registrar veículo</button></div></form>';
   $('#unscheduledArrivalModal').classList.remove('hidden');
   $('#unscheduledSupplierTrigger').focus();
 }
@@ -747,12 +742,10 @@ document.addEventListener('click',async e=>{
   const performanceSupplier=e.target.closest('[data-performance-supplier]');if(performanceSupplier){openDelayDetail(Number(performanceSupplier.dataset.performanceSupplier));return}
   const arrivalTab=e.target.closest('[data-arrival-tab]');if(arrivalTab){state.arrivalTab=arrivalTab.dataset.arrivalTab;renderArrivalTab();return}
   if(e.target.closest('[data-unscheduled-open]')){try{await openUnscheduledArrivalModal()}catch(error){toast(error.message,true)}return}
-  const redoUnscheduled=e.target.closest('[data-unscheduled-redo]');
-  if(redoUnscheduled){try{const row=state.unscheduledArrivals.find(item=>Number(item.id)===Number(redoUnscheduled.dataset.unscheduledRedo));if(row)await openUnscheduledArrivalModal(row)}catch(error){toast(error.message,true)}return}
-  const undoUnscheduled=e.target.closest('[data-unscheduled-undo]');
-  if(undoUnscheduled){
-    if(!confirm('Estornar este veículo fora da agenda? Ele voltará para Aguardando chegada e deixará de contar nos indicadores até ser registrado novamente.'))return;
-    try{await api('/api/arrivals/unscheduled/'+undoUnscheduled.dataset.unscheduledUndo+'/undo','POST',{});state.arrivalTab='pending';toast('Chegada estornada.');await refreshArrivals()}catch(error){toast(error.message,true)}
+  const deleteUnscheduled=e.target.closest('[data-unscheduled-delete]');
+  if(deleteUnscheduled){
+    if(!confirm('Excluir definitivamente este veículo fora da agenda? O registro será removido dos indicadores.'))return;
+    try{await api('/api/arrivals/unscheduled/'+deleteUnscheduled.dataset.unscheduledDelete,'DELETE');toast('Veículo fora da agenda excluído.');await refreshArrivals()}catch(error){toast(error.message,true)}
     return;
   }
   const undoNoShow=e.target.closest('[data-no-show-undo]');
@@ -877,8 +870,7 @@ document.addEventListener('submit',async e=>{
     }
     if(form.id==='unscheduledArrivalForm'){
       if(!values.supplier_id)throw new Error('Selecione o fornecedor.');
-      if(form.dataset.editId)await api('/api/arrivals/unscheduled/'+form.dataset.editId+'/rerecord','POST',values);
-      else await api('/api/arrivals/unscheduled','POST',values);
+      await api('/api/arrivals/unscheduled','POST',values);
       closeUnscheduledArrivalModal();
       state.arrivalDay=values.day;state.arrivalTab='unscheduled';
       const arrivalDayField=$('#arrivalDay');if(arrivalDayField)arrivalDayField.value=values.day;
