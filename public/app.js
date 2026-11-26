@@ -370,7 +370,7 @@ function printDashboardDay(){
   document.body.classList.add('printing-agenda');
   window.print();
 }
-window.addEventListener('afterprint',()=>{document.body.classList.remove('printing-agenda');$('#agendaPrint').replaceChildren()});
+window.addEventListener('afterprint',()=>{document.body.classList.remove('printing-agenda','printing-ticket');$('#agendaPrint').replaceChildren()});
 const minutesOfTime=value=>Number(String(value).slice(0,2))*60+Number(String(value).slice(3,5));
 const currentLocalDay=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const currentLocalTime=()=>new Intl.DateTimeFormat('en-GB',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date());
@@ -856,7 +856,7 @@ document.addEventListener('click',async e=>{
   if(e.target.id==='closeHistory'||e.target.id==='cancelHistory'||e.target.id==='historyModal')closeHistoryModal();
   if(e.target.id==='closeUserRole'||e.target.id==='cancelUserRole'||e.target.id==='userRoleModal')closeUserRoleModal();
   if(e.target.id==='closeUnscheduledArrival'||e.target.id==='cancelUnscheduledArrival'||e.target.id==='unscheduledArrivalModal')closeUnscheduledArrivalModal();
-  if(e.target.id==='printTicket')window.print();
+  if(e.target.id==='printTicket'){document.body.classList.add('printing-ticket');window.print()}
   if(e.target.id==='logoutBtn'){await api('/api/logout','POST',{});state.user=null;showAuth('login')}
 });
 document.addEventListener('input',e=>{

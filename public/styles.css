@@ -4,7 +4,7 @@
 @media(max-width:1050px){.stat-grid{grid-template-columns:repeat(2,1fr)}.content-grid,.schedule-grid,.admin-grid{grid-template-columns:1fr}.auth-intro{padding:36px}.auth-intro h1{font-size:47px}}
 @media(max-width:720px){.auth-screen{display:block}.auth-intro{min-height:270px;padding:30px 25px}.auth-intro .brand-mark,.auth-intro .intro-rule,.auth-intro .intro-bottom{display:none}.auth-intro .eyebrow{margin:0 0 13px}.auth-intro h1{font-size:39px;margin-bottom:10px}.intro-copy{margin:0;font-size:13px}.auth-card{padding:27px 22px 45px;display:block}.auth-mobile-brand{display:flex;align-items:center;gap:10px;margin-bottom:23px;color:var(--green)}.auth-inner h2{font-size:27px}.sidebar{position:fixed;left:-270px;width:258px;height:100vh;transition:left .2s;box-shadow:10px 0 30px #0e302a44}.sidebar.open{left:0}.sidebar .side-label{opacity:1}.mobile-overlay{display:none;position:fixed;inset:0;background:#071e16aa;z-index:20}.mobile-overlay.show{display:block}.mobile-menu{display:block}.topbar{height:72px;padding:0 16px;justify-content:flex-start}.topbar h2{font-size:17px}.top-actions{margin-left:auto}.date-pill{display:none}.view-content{padding:24px 16px 50px}.page-head{align-items:flex-start;flex-direction:column}.page-head h1{font-size:26px}.stat-grid{gap:10px}.stat-card{padding:17px;min-height:125px}.stat-value{font-size:25px}.filter-card{padding:15px;gap:10px}.filter-card .field{flex:1;min-width:125px}.form-card,.section-card,.pending-card,.supplier-card{padding:18px}.field-row{grid-template-columns:1fr;gap:0}.form-footer{flex-direction:column;align-items:stretch}.form-footer .btn{width:100%}.time-grid{grid-template-columns:repeat(4,1fr)}.ticket{padding:25px 18px}.ticket-row{grid-template-columns:92px 1fr}.modal-toolbar strong{display:none}}
 @media(max-width:420px){.time-grid{grid-template-columns:repeat(3,1fr)}.stat-grid{grid-template-columns:1fr 1fr}.stat-card{padding:14px}.stat-value{font-size:23px}.top-context{font-size:9px}}
-@media print{body{background:white}.auth-screen,.app-shell,.toast,.modal-toolbar{display:none!important}.modal-backdrop{position:static;display:block!important;background:white;padding:0;overflow:visible}.ticket-window{width:100%;max-height:none;box-shadow:none;background:white;overflow:visible}.ticket{margin:0;border-radius:0;padding:10px 20px}.ticket-header{padding-bottom:12px}.ticket-row{padding:7px 0} }
+@media print{body{background:white}.auth-screen,.app-shell,.toast,.modal-toolbar{display:none!important}}
 
 /* Visual baseado na referência Administrativa CD */
 :root{--green:#0b2448;--green2:#2b7fff;--mint:#eaf2ff;--lime:#2b7fff;--ink:#14243d;--muted:#6c7e99;--line:#dfe7f3;--bg:#f3f6fb;--white:#fff;--shadow:0 16px 40px rgba(8,22,45,.07)}
@@ -332,3 +332,19 @@ body.dashboard-has-zoom{overflow:hidden}
 @media(max-width:720px){.notification-panel{right:-54px}.notification-bell{width:38px;height:38px}.top-actions{gap:9px}}
 @media(max-width:720px){.user-search{max-width:none;flex-basis:100%}.user-role-filter{flex:1}.user-search-count{padding-bottom:10px}}
 @media print{#notificationArea{display:none!important}}
+@media print{
+  html,body.printing-ticket{background:#fff!important}
+  body.printing-ticket> :not(#ticketModal){display:none!important}
+  body.printing-ticket #ticketModal{position:static;inset:auto;display:block!important;overflow:visible;padding:0;background:#fff;box-shadow:none}
+  body.printing-ticket #ticketModal .ticket-window{width:100%;max-height:none;overflow:visible;background:#fff;border:0;border-radius:0;box-shadow:none}
+  body.printing-ticket #ticketModal .modal-toolbar{display:none!important}
+  body.printing-ticket #ticketModal .ticket{max-width:180mm;margin:0 auto;padding:0;background:#fff;border:0;border-radius:0;box-shadow:none;color:#202833;font:11px/1.35 Arial,sans-serif}
+  body.printing-ticket #ticketModal .ticket-header{padding-bottom:12px;border-bottom:2px solid #4b5563}
+  body.printing-ticket #ticketModal .ticket-header small{color:#303a48;font-size:10px;letter-spacing:.1em}
+  body.printing-ticket #ticketModal .ticket-number{color:#17202e;font:700 38px Arial,sans-serif;letter-spacing:.11em}
+  body.printing-ticket #ticketModal .ticket-protocol{color:#374151;font-size:10px;margin:10px auto 17px}
+  body.printing-ticket #ticketModal .ticket-row{grid-template-columns:110px minmax(0,1fr);gap:10px;padding:6px 0;border-bottom:1px solid #d8dee5;font-size:11px;break-inside:avoid}
+  body.printing-ticket #ticketModal .ticket-row span{color:#374151}
+  body.printing-ticket #ticketModal .ticket-row strong{color:#111827;font-size:11px}
+  body.printing-ticket #ticketModal .ticket-footer{color:#374151;font-size:10px;margin-top:18px}
+}
