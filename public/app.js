@@ -271,7 +271,13 @@ async function renderDashboard(){
     const totalWeight=commercial?Number(summary.peso||0):sum('weight_kg');
     const totalItems=commercial?Number(summary.items||0):sum('item_count');
     const totalBoxes=commercial?Number(summary.boxes||0):sum('box_count');
-    const cards=[['▣','Carros agendados',formatNum(totalBookings),'veículos'],['◈','Peso total',formatWeight(totalWeight),'kg'],['≡','Quantidade de itens',formatNum(totalItems),'itens'],['▤','Quantidade de caixas',formatNum(totalBoxes),'caixas']];
+    const statIcons={
+      vehicles:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h3l3 3v3h-6z"/><circle cx="7" cy="17" r="1.5"/><circle cx="17" cy="17" r="1.5"/></svg>',
+      weight:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 8V6a3 3 0 0 1 6 0v2M7 9h10l2 11H5L7 9Z"/></svg>',
+      items:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="3" height="3" rx=".5"/><rect x="3" y="11" width="3" height="3" rx=".5"/><rect x="3" y="18" width="3" height="3" rx=".5"/><path d="M10 5.5h11M10 12.5h11M10 19.5h11"/></svg>',
+      boxes:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v8H8zM4 12h8v8H4zM12 12h8v8h-8zM12 4v3M8 12v3M16 12v3"/></svg>'
+    };
+    const cards=[[statIcons.vehicles,'Carros agendados',formatNum(totalBookings),'veículos'],[statIcons.weight,'Peso total',formatWeight(totalWeight),'kg'],[statIcons.items,'Quantidade de itens',formatNum(totalItems),'itens'],[statIcons.boxes,'Quantidade de caixas',formatNum(totalBoxes),'caixas']];
     const dayGroups=new Map();
     for(const row of dailySupplierRows){let day=dayGroups.get(row.day);if(!day){day={day:row.day,count:0};dayGroups.set(row.day,day)}day.count+=Number(row.appointment_count||0)}
     const dailyCounts=Array.from(dayGroups.values()).sort((a,b)=>a.day.localeCompare(b.day));
